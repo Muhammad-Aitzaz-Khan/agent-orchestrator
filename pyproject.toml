@@ -4,9 +4,12 @@ version = "0.1.0"
 description = "A multi-agent orchestration system with tracing and an evaluation harness"
 readme = "README.md"
 requires-python = ">=3.11"
+
 dependencies = [
     "anthropic",
+    "openai",
     "pydantic>=2",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
