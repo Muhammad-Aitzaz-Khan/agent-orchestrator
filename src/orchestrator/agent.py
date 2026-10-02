@@ -1,0 +1,125 @@
+"""The core agent loop."""
+import os
+import time
+import uuid
+from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
+
+from dotenv import load_dotenv
+from openai import OpenAI, OpenAIError
+
+from orchestrator.state import RunResult, Step, ToolCall
+from orchestrator.tools import TOOL_SCHEMAS, execute_tool
+from orchestrator.tracing import Tracer
+
+SYSTEM_PROMPT = (
+    "You are a helpful agent that answers questions about a software project. "
+    "Use the tools to look at real files before answering. Never guess file contents. "
+    "If a tool returns an error, say so honestly instead of making something up."
+)
+DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+
+def make_client() -> OpenAI:
+    load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not set. Add it to your .env file.")
+    return OpenAI(api_key=api_key, base_url=os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL))
+
+
+def default_model() -> str:
+    load_dotenv()
+    return os.getenv("LLM_MODEL", DEFAULT_MODEL)
+
+
+def new_run_id() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+
+
+def run_agent(
+    task: str,
+    root: Path | None = None,
+    max_steps: int = 10,
+    model: str | None = None,
+    client: OpenAI | None = None,
+    on_step: Callable[[Step], None] | None = None,
+) -> RunResult:
+    """Run one agent on a task and return everything that happened."""
+    root = (root or Path.cwd()).resolve()
+    client = client or make_client()
+    model = model or default_model()
+
+    run_id = new_run_id()
+    tracer = Tracer(run_id)
+    result = RunResult(run_id=run_id, task=task, status="max_steps")
+    started = time.perf_counter()
+    tracer.log("run_start", task=task, model=model, root=str(root), max_steps=max_steps)
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": task},
+    ]
+
+    try:
+        for number in range(1, max_steps + 1):
+            t0 = time.perf_counter()
+            response = client.chat.completions.create(
+                model=model, messages=messages, tools=TOOL_SCHEMAS
+            )
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+
+            message = response.choices[0].message
+            tokens = response.usage.total_tokens if response.usage else 0
+            messages.append(message.model_dump(exclude_none=True))
+
+            step = Step(number=number, text=message.content, tokens=tokens, latency_ms=latency_ms)
+            tool_calls = message.tool_calls or []
+            tracer.log(
+                "model_call",
+                step=number,
+                latency_ms=latency_ms,
+                tokens=tokens,
+                text=message.content,
+                tools_requested=[c.function.name for c in tool_calls],
+            )
+
+            for call in tool_calls:
+                output = execute_tool(call.function.name, call.function.arguments, root)
+                step.tool_calls.append(
+                    ToolCall(name=call.function.name, arguments=call.function.arguments, output=output)
+                )
+                tracer.log(
+                    "tool_call",
+                    step=number,
+                    name=call.function.name,
+                    arguments=call.function.arguments,
+                    output=output[:500],
+                )
+                messages.append({"role": "tool", "tool_call_id": call.id, "content": output})
+
+            result.steps.append(step)
+            result.total_tokens += tokens
+            if on_step:
+                on_step(step)
+
+            if not tool_calls:
+                result.status = "completed"
+                result.final_answer = message.content
+                break
+    except OpenAIError as e:
+        result.status = "error"
+        result.error = f"{type(e).__name__}: {e}"
+
+    result.duration_s = round(time.perf_counter() - started, 2)
+    tracer.log(
+        "run_end",
+        status=result.status,
+        steps=len(result.steps),
+        total_tokens=result.total_tokens,
+        duration_s=result.duration_s,
+        error=result.error,
+    )
+    return result
