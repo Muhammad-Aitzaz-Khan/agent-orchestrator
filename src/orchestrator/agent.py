@@ -14,9 +14,15 @@ from orchestrator.tools import TOOL_SCHEMAS, execute_tool
 from orchestrator.tracing import Tracer
 
 SYSTEM_PROMPT = (
-    "You are a helpful agent that answers questions about a software project. "
-    "Use the tools to look at real files before answering. Never guess file contents. "
-    "If a tool returns an error, say so honestly instead of making something up."
+    "You are a software engineering agent working inside a project folder. "
+    "Use the tools to inspect files, make changes, and verify them.\n"
+    "Workflow for fixing bugs:\n"
+    "1. List the files and read the relevant source code.\n"
+    "2. Run the tests to see exactly what fails.\n"
+    "3. Fix the source code with write_file, sending the complete file.\n"
+    "4. Run the tests again to confirm the fix.\n"
+    "Never modify test files. Never guess file contents. If a tool returns an error, "
+    "say so honestly. When finished, summarize what you changed and the final test result."
 )
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -46,6 +52,7 @@ def run_agent(
     model: str | None = None,
     client: OpenAI | None = None,
     on_step: Callable[[Step], None] | None = None,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> RunResult:
     """Run one agent on a task and return everything that happened."""
     root = (root or Path.cwd()).resolve()
@@ -59,7 +66,7 @@ def run_agent(
     tracer.log("run_start", task=task, model=model, root=str(root), max_steps=max_steps)
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": task},
     ]
 
