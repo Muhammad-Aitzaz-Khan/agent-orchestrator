@@ -1,0 +1,67 @@
+# Evals
+
+The eval harness measures how often the agent fixes real bugs. Unit tests in `tests/` check that
+the code works; evals check how well the AI performs.
+
+## Running
+
+```powershell
+python evals/run_evals.py --check-tasks          # validate every task, no API calls
+python evals/run_evals.py --repeats 3            # full run, 3 attempts per task
+python evals/run_evals.py --difficulty hard
+python evals/run_evals.py --task parser --repeats 5
+```
+
+Results are printed per difficulty and saved to `evals/results/<timestamp>.json`.
+
+## How a run is judged
+
+1. The task's `repo/` is copied to a temporary folder. The original is never modified.
+2. The agent works in that copy.
+3. Test and config files are restored from the original, so editing tests cannot pass.
+4. Hidden tests (if any) are added. The agent never sees these.
+5. The harness runs pytest itself. The agent's own claim of success is ignored.
+
+API errors (rate limits, network) are reported separately and excluded from the pass rate.
+
+## Tasks
+
+| Task | Level | What makes it hard |
+|---|---|---|
+| easy_calculator | easy | Three one-line bugs, failing tests point straight at them |
+| easy_grades | easy | Boundary conditions (`>` vs `>=`), empty input |
+| easy_strings | easy | Case handling, empty words, wrong operation |
+| easy_temperature | easy | Formula and operator-precedence bugs |
+| medium_bank_account | medium | Mutable default argument; hidden tests check rollback on failed transfer |
+| medium_cart | medium | Percent math, ignored quantity, empty input |
+| medium_inventory | medium | Two files: tests fail in `inventory.py` but most bugs are in `pricing.py` |
+| medium_monthly_report | medium | Vague bug report instead of "tests are failing"; hidden refund case |
+| medium_word_frequency | medium | Normalisation plus tie-breaking rules from the docstring |
+| hard_algorithms | hard | Binary search and interval merging; hidden edge cases |
+| hard_dynamic_programming | hard | Off-by-one DP tables and base cases; hidden impossible/empty cases |
+| hard_expression_parser | hard | Tokenizer, associativity, and unary minus in a recursive-descent parser |
+| hard_graph | hard | Topological sort ordering and cycle detection; reversed BFS path |
+| hard_lru_cache | hard | Recency tracking, update vs insert, capacity 0 |
+| hard_meeting_scheduler | hard | Two files, all visible tests pass; only a user bug report describes the problem |
+
+## Task layout
+
+```
+evals/tasks/<name>/
+    task.toml      difficulty ("easy" | "medium" | "hard") and the prompt given to the agent
+    repo/          the buggy project, including visible tests and pytest.ini
+    hidden/        optional: extra tests the agent never sees
+    solution/      fixed source files; used only by --check-tasks
+```
+
+## Adding a task
+
+1. Write the correct code and tests first, and confirm they pass.
+2. Copy the correct files into `solution/`, then insert bugs into the copies in `repo/`.
+3. Put the specification in docstrings, so hidden tests are fair: the agent can only be expected
+   to handle edge cases it can read about.
+4. Keep tests deterministic (no randomness, network, or timing) and fast.
+5. Keep each source file under 5,000 characters, the agent's `read_file` limit.
+6. Run `python evals/run_evals.py --check-tasks`. Every task must show `OK`.
+
+`tests/test_evals.py` runs the same check, so `pytest` fails if any task breaks.

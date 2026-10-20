@@ -1,0 +1,2 @@
+difficulty = "hard"
+prompt = "Users report two problems with the meeting room system: back-to-back meetings cannot be booked in the same room, and free_slots sometimes misses free time. The existing tests all pass. Find and fix the bugs without breaking existing behaviour."

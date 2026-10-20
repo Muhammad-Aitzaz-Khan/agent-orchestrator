@@ -172,7 +172,7 @@ def check_tasks(tasks: list[dict]) -> bool:
     for task in tasks:
         problems = check_task(task)
         status = "OK " if not problems else "BAD"
-        print(f"{status} {task['id']:<24}{task['difficulty']}")
+        print(f"{status} {task['id']:<28}{task['difficulty']}")
         for p in problems:
             print(f"      - {p}")
         all_ok = all_ok and not problems
@@ -204,10 +204,10 @@ def summarize(rows: list[dict]) -> dict[str, dict]:
 
 
 def print_report(rows: list[dict], summary: dict[str, dict]) -> None:
-    print(f"\n{'task':<24}{'level':<8}{'result':<8}{'steps':>6}{'tokens':>9}{'time':>9}")
+    print(f"\n{'task':<28}{'level':<8}{'result':<8}{'steps':>6}{'tokens':>9}{'time':>9}")
     for r in rows:
         print(
-            f"{r['task']:<24}{r['difficulty']:<8}{r['outcome'].upper():<8}"
+            f"{r['task']:<28}{r['difficulty']:<8}{r['outcome'].upper():<8}"
             f"{r['steps']:>6}{r['tokens']:>9}{r['duration_s']:>8.1f}s"
         )
     print()

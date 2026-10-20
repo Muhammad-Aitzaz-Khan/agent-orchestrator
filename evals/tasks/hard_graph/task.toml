@@ -1,0 +1,2 @@
+difficulty = "hard"
+prompt = "The tests are failing. Find and fix the bugs in the source code."
