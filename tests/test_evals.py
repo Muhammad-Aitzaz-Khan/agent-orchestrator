@@ -102,3 +102,15 @@ def test_daily_limit_row_detection():
     assert run_evals.is_daily_limit_row(row("a", "error", "DailyLimitReached: tokens per day"))
     assert not run_evals.is_daily_limit_row(row("a", "error", "RateLimitError: per minute"))
     assert not run_evals.is_daily_limit_row(row("a", "fail"))
+
+
+def dead(task="a"):
+    return {"task": task, "outcome": "error", "steps": 0, "error": "503"}
+
+
+def test_provider_down_after_streak_of_dead_runs():
+    assert run_evals.provider_down([dead(), dead(), dead()])
+    assert not run_evals.provider_down([dead(), dead()])
+    worked = {"task": "a", "outcome": "fail", "steps": 6, "error": None}
+    assert not run_evals.provider_down([dead(), worked, dead(), dead()][:3])
+    assert not run_evals.provider_down([dead(), dead(), worked])

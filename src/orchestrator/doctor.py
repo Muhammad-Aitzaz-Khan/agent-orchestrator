@@ -1,4 +1,4 @@
-"""Checks the API setup: python -m orchestrator.doctor
+"""Checks the API setup: python -m orchestrator.doctor   (add --models to list every model)
 
 Prints which provider and model are configured, whether the model is available to your key,
 and makes one tiny request. The API key itself is never printed.
@@ -30,10 +30,11 @@ def main() -> None:
     available = model in models or f"models/{model}" in models
     print(f"\n{len(models)} models available to this key. Configured model: "
           f"{'FOUND' if available else 'NOT FOUND'}")
-    if not available:
-        print("Pick one of these for LLM_MODEL in .env:")
+    if not available or "--models" in sys.argv:
+        print("Models you can use for LLM_MODEL in .env:")
         for m in models:
             print(f"    {m.removeprefix('models/')}")
+    if not available:
         sys.exit(1)
 
     try:

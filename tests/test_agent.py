@@ -164,3 +164,23 @@ def test_requests_stay_under_context_budget(in_tmp):
     # with it, the size levels off instead of growing every step
     assert max(sizes) < 14_000
     assert sizes[-1] - sizes[-4] < 500
+
+
+def server_error(status=503, message="This model is currently experiencing high demand."):
+    response = httpx.Response(status, request=httpx.Request("POST", "http://test"))
+    return openai.InternalServerError(message, response=response, body=None)
+
+
+def test_waits_longer_each_time_provider_is_overloaded(in_tmp):
+    client = FakeClient([server_error(), server_error(), completion(content="ok")])
+    result, waits = run(client, root=in_tmp)
+    assert result.status == "completed"
+    assert waits == [10.0, 20.0]
+
+
+def test_gives_up_when_provider_stays_down(in_tmp):
+    client = FakeClient([server_error()] * (agent.MAX_UNAVAILABLE_RETRIES + 1))
+    result, waits = run(client, root=in_tmp)
+    assert result.status == "error"
+    assert "InternalServerError" in result.error
+    assert len(waits) == agent.MAX_UNAVAILABLE_RETRIES

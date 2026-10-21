@@ -241,6 +241,17 @@ def is_daily_limit_row(row: dict) -> bool:
     return row["outcome"] == "error" and "DailyLimitReached" in (row.get("error") or "")
 
 
+UNAVAILABLE_STREAK = 3  # stop after this many runs in a row that never got a model response
+
+
+def provider_down(rows: list[dict]) -> bool:
+    """True when the last few runs all failed before the model answered even once."""
+    recent = rows[-UNAVAILABLE_STREAK:]
+    return len(recent) == UNAVAILABLE_STREAK and all(
+        r["outcome"] == "error" and r["steps"] == 0 for r in recent
+    )
+
+
 def merge_results(previous: list[dict], new: list[dict]) -> list[dict]:
     """Replace the previous error rows with the new attempts.
 
@@ -333,15 +344,20 @@ def main() -> None:
         rows = merge_results(previous, new_rows) if previous else new_rows
         save_results(out_file, model, args, rows, complete=False)  # saved after every run
 
+        reason = None
         if is_daily_limit_row(row):
+            reason = "Daily API limit reached"
+        elif provider_down(new_rows):
+            reason = f"The provider failed {UNAVAILABLE_STREAK} runs in a row (overloaded or down)"
+        if reason:
             stopped_early = True
             try:
                 shown = out_file.relative_to(Path.cwd()).as_posix()
             except ValueError:
                 shown = out_file.as_posix()
             print(
-                "\nDaily API limit reached, so the remaining runs were skipped.\n"
-                f"When the limit resets, continue with:\n"
+                f"\n{reason}, so the remaining runs were skipped.\n"
+                f"Try again later, or with another model, using:\n"
                 f"    python evals/run_evals.py --retry-errors {shown}"
             )
             break
@@ -356,7 +372,7 @@ def main() -> None:
                 "task": t["id"], "difficulty": t["difficulty"], "outcome": "error",
                 "agent_status": "error", "test_summary": "not run", "failed_tests": [],
                 "steps": 0, "tokens": 0, "duration_s": 0.0, "run_id": "-",
-                "error": "DailyLimitReached: skipped",
+                "error": "Skipped: run stopped early",
             }
             for t in runs[ran:]
         ]

@@ -7,7 +7,15 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import BadRequestError, OpenAI, OpenAIError, RateLimitError
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    BadRequestError,
+    InternalServerError,
+    OpenAI,
+    OpenAIError,
+    RateLimitError,
+)
 
 from orchestrator.context import compact, conversation_size
 from orchestrator.state import RunResult, Step, ToolCall
@@ -32,6 +40,7 @@ DEFAULT_MAX_CONTEXT_CHARS = 20_000  # about 5,000 tokens; Groq's free tier caps 
 MAX_RATE_LIMIT_WAITS = 5  # retries per model call for short (per-minute) limits
 MAX_WAIT_S = 90  # never sleep longer than this for one retry
 MAX_BAD_TOOL_CALL_RETRIES = 2  # retries when the model produces a malformed tool call
+MAX_UNAVAILABLE_RETRIES = 4  # retries when the provider is overloaded or unreachable (503, network)
 
 
 class DailyLimitReached(Exception):
@@ -96,10 +105,13 @@ def call_model(
     - Per-minute rate limits: wait as long as the provider asks, then retry.
     - Malformed tool calls rejected by the provider: ask again (models are random,
       so the next attempt is usually well-formed).
+    - Provider overloaded or unreachable (503 "high demand", network errors): wait
+      10, 20, 40, 80 seconds and retry.
     Raises DailyLimitReached when the daily quota is exhausted.
     """
     rate_limit_waits = 0
     bad_tool_calls = 0
+    unavailable_waits = 0
     while True:
         try:
             return client.chat.completions.create(**kwargs)
@@ -117,6 +129,14 @@ def call_model(
                 raise
             bad_tool_calls += 1
             tracer.log("bad_tool_call_retry", attempt=bad_tool_calls, error=str(e)[:300])
+        except (InternalServerError, APIConnectionError, APITimeoutError) as e:
+            if unavailable_waits == MAX_UNAVAILABLE_RETRIES:
+                raise
+            wait = min(10.0 * 2**unavailable_waits, MAX_WAIT_S)
+            unavailable_waits += 1
+            tracer.log("provider_unavailable", attempt=unavailable_waits, wait_s=wait,
+                       error=str(e)[:200])
+            sleep(wait)
 
 
 # ---------- the loop ----------
