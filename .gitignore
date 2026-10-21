@@ -29,3 +29,6 @@ runs/
 Thumbs.db
 # Private drafts (launch posts, notes)
 drafts/
+
+# Replays shipped with the web app are recordings, not runtime traces
+!src/orchestrator/web/replays/*.jsonl
