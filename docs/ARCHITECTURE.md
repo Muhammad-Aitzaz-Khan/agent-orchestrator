@@ -8,7 +8,15 @@ tools, and eval harness:
   orchestrator.
 
 Both modes are measured on the same benchmark (`evals/`), so the effect of the team can be
-compared directly with the single agent on the same model.
+compared directly with the single agent on the same model. Results: `evals/RESULTS.md`.
+
+The team handles two kinds of work with the same state machine (`roles.TEAMS`):
+
+- **fix**: repair an existing project. The Planner reads code, docstrings, and failing tests.
+- **create**: make something new from a request (writing, a web page, code). The Coder is
+  called the Builder, the Tester measures anything countable with `run_python` (paragraphs,
+  word counts, forbidden words), and the test gate is skipped when the project has no tests.
+  Random choices must be made with Python's `random` module, never claimed.
 
 ## Why four agents
 
@@ -100,6 +108,27 @@ Groq, where each model has its own daily limit, this also spreads usage across q
 a trace of phase transitions and a `runs/<id>.state.json` snapshot of the whole state (plan,
 rounds, decisions, tokens per role) after every phase.
 
+## The web app (Relay)
+
+`python -m orchestrator.web` serves a page where anyone can type a request (create mode) or
+pick a sample project to fix, then watch the agents work. The orchestrator emits structured
+events (`run_started`, `agent_started`, `agent_step`, `agent_submitted`, `agent_finished`,
+`gate`, `decision`, `run_finished`) through `on_update`; the server streams them to the page
+with Server-Sent Events. The page shows the four roles as stations on a line, the conversation
+in plain language, a checklist that ticks as the Tester reports, and the result (rendered
+Markdown, a sandboxed preview for HTML, or a diff).
+
+The server listens on 127.0.0.1, allows one live run at a time, limits request length, and
+saves each run's events so it can become a replay. `web/replays/` holds recordings rebuilt
+from real eval traces by `web/record.py` (paths that reveal a user's name are removed), so
+the app can be demonstrated without an API key.
+
+## Measuring what each part adds
+
+`checkers=False` (`--mode plan-code` in the eval harness) runs only the Planner and the Coder,
+plus the deterministic test gate. Comparing it with the full team isolates what the Tester and
+Reviewer contribute and what they cost.
+
 ## Shared infrastructure
 
 | Module | Responsibility |
@@ -110,13 +139,18 @@ rounds, decisions, tokens per role) after every phase.
 | `roles.py` | The four roles and the messages built for each from the shared state |
 | `orchestrator.py` | The state machine described above |
 | `doctor.py` | Checks the provider, key, and whether a model can make tool calls |
+| `web/` | The Relay web app, its live event stream, and replays |
+| `evals/rescore.py` | Re-judges finished runs from their traces after a task's tests are corrected |
 | `evals/run_evals.py` | Runs either mode on the benchmark and judges results with its own test run |
 
 ## Known limitations
 
-- **Not a real sandbox.** `run_tests` and `run_python` execute model-written code with the
-  user's permissions. Copies, timeouts, and secret-free environments reduce the risk but do
-  not remove it. Container isolation is planned for Phase 5.
+- **Sandboxing is opt-in.** By default (`SANDBOX=local`) `run_tests` and `run_python` execute
+  model-written code as normal processes, protected only by copies, timeouts, and secret-free
+  environments. With `SANDBOX=docker` the same code runs in a throwaway container with no
+  network, a read-only filesystem apart from the project folder and `/tmp`, an unprivileged
+  user, and memory, CPU, and process limits (`sandbox/Dockerfile`). The eval judge uses the
+  same setting.
 - **Cost.** A team run makes more model calls than a single agent. The gate, the
   Tester-before-Reviewer ordering, and the budgets keep this down; the eval reports tokens per
   role so the trade-off can be measured.

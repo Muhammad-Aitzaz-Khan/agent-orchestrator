@@ -184,3 +184,44 @@ def test_gives_up_when_provider_stays_down(in_tmp):
     assert result.status == "error"
     assert "InternalServerError" in result.error
     assert len(waits) == agent.MAX_UNAVAILABLE_RETRIES
+
+
+def test_malformed_tool_call_retry_explains_the_problem(in_tmp):
+    client = FakeClient([bad_request(TOOL_VALIDATION), completion(content="done")])
+    run(client, root=in_tmp)
+    retry_messages = client.requests[1]["messages"]
+    assert "rejected because a tool call was malformed" in retry_messages[-1]["content"]
+    assert len(client.requests[0]["messages"]) == 2  # the note is not added to the history
+    assert len(retry_messages) == 3
+
+
+def test_loop_detection_nudges_after_repeated_identical_calls(in_tmp):
+    same = completion(tool_calls=[("read_file", {"path": "hello.py"})])
+    client = FakeClient([same, same, same, completion(content="ok")])
+    result, _ = run(client, root=in_tmp)
+    assert result.status == "completed"
+    last = client.requests[3]["messages"][-1]
+    assert last["role"] == "user" and "same tool call 3 times" in last["content"]
+
+
+def test_different_calls_are_not_a_loop(in_tmp):
+    client = FakeClient([
+        completion(tool_calls=[("read_file", {"path": "hello.py"})]),
+        completion(tool_calls=[("list_files", {})]),
+        completion(tool_calls=[("read_file", {"path": "hello.py"})]),
+        completion(content="ok"),
+    ])
+    run(client, root=in_tmp)
+    assert all("same tool call" not in str(r["messages"][-1].get("content")) for r in client.requests)
+
+
+def test_role_is_warned_before_running_out_of_steps(in_tmp):
+    from orchestrator.roles import TESTER
+
+    calls = [completion(tool_calls=[("run_python", {"code": f"print({i})"})]) for i in range(4)]
+    client = FakeClient(calls)
+    result, _ = run(client, root=in_tmp, max_steps=4, role=TESTER)
+    assert result.status == "max_steps"
+    warned = [r for r in client.requests if "steps left" in str(r["messages"][-1].get("content"))]
+    assert len(warned) == 1  # sent once, after step 2 of 4
+    assert client.requests.index(warned[0]) == 2

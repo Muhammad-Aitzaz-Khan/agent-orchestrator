@@ -43,6 +43,8 @@ DEFAULT_MAX_CONTEXT_CHARS = 20_000  # about 5,000 tokens; Groq's free tier caps 
 MAX_RATE_LIMIT_WAITS = 5  # retries per model call for short (per-minute) limits
 MAX_WAIT_S = 90  # never sleep longer than this for one retry
 MAX_BAD_TOOL_CALL_RETRIES = 2  # retries when the model produces a malformed tool call
+STEPS_LEFT_WARNING = 2  # remind a role to submit when this many steps remain
+LOOP_REPEATS = 3  # identical tool calls in this many consecutive steps count as a loop
 MAX_SUBMIT_NUDGES = 2  # reminders to a role that stops without calling its submit tool
 MAX_UNAVAILABLE_RETRIES = 4  # retries when the provider is overloaded or unreachable (503, network)
 
@@ -89,6 +91,16 @@ def is_bad_tool_call(error: Exception) -> bool:
     return "tool call validation failed" in text or "tool_use_failed" in text
 
 
+def _api_error_message(error: Exception) -> str:
+    """The provider's human-readable message, without the surrounding JSON."""
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        inner = body.get("error", body)
+        if isinstance(inner, dict) and inner.get("message"):
+            return str(inner["message"])[:300]
+    return str(error)[:300]
+
+
 def retry_after_seconds(error: Exception, attempt: int) -> float:
     """How long to wait before retrying: the provider's retry-after header if present,
     otherwise exponential backoff (2, 4, 8, ... seconds)."""
@@ -107,8 +119,8 @@ def call_model(
     """Call the model, recovering from problems that a retry can fix.
 
     - Per-minute rate limits: wait as long as the provider asks, then retry.
-    - Malformed tool calls rejected by the provider: ask again (models are random,
-      so the next attempt is usually well-formed).
+    - Malformed tool calls rejected by the provider: ask again, adding a note that says
+      what was wrong. Resending the identical request tends to reproduce the same mistake.
     - Provider overloaded or unreachable (503 "high demand", network errors): wait
       10, 20, 40, 80 seconds and retry.
     Raises DailyLimitReached when the daily quota is exhausted.
@@ -116,6 +128,7 @@ def call_model(
     rate_limit_waits = 0
     bad_tool_calls = 0
     unavailable_waits = 0
+    original_messages = kwargs.get("messages", [])
     while True:
         try:
             return client.chat.completions.create(**kwargs)
@@ -133,6 +146,13 @@ def call_model(
                 raise
             bad_tool_calls += 1
             tracer.log("bad_tool_call_retry", attempt=bad_tool_calls, error=str(e)[:300])
+            correction = {
+                "role": "user",
+                "content": "Your last reply was rejected because a tool call was malformed "
+                f"({_api_error_message(e)}). Every tool call must include all of its required "
+                "arguments with the correct names. Try again.",
+            }
+            kwargs = {**kwargs, "messages": [*original_messages, correction]}
         except (InternalServerError, APIConnectionError, APITimeoutError) as e:
             if unavailable_waits == MAX_UNAVAILABLE_RETRIES:
                 raise
@@ -208,6 +228,7 @@ def run_agent(
         {"role": "user", "content": task},
     ]
     nudges = 0
+    recent_calls: list[tuple] = []  # tool calls of the latest steps, for loop detection
 
     try:
         for number in range(1, max_steps + 1):
@@ -259,11 +280,32 @@ def run_agent(
             if on_step:
                 on_step(step)
 
+            signature = tuple((c.function.name, c.function.arguments) for c in tool_calls)
+            recent_calls = [*recent_calls, signature][-LOOP_REPEATS:]
+            if signature and len(recent_calls) == LOOP_REPEATS and len(set(recent_calls)) == 1:
+                tracer.log("loop_detected", step=number, calls=[name for name, _ in signature])
+                messages.append({
+                    "role": "user",
+                    "content": f"You have made the same tool call {LOOP_REPEATS} times in a row "
+                    "and got the same result. Repeating it will not help: try a different "
+                    "approach" + (f", or call {role.submit_tool} if you are done." if role else "."),
+                })
+                recent_calls = []
+
             if result.output is not None:
                 result.status = "completed"
                 result.final_answer = message.content
                 tracer.log("submitted", step=number, role=role.name, output=result.output)
                 break
+
+            if role and tool_calls and max_steps - number == STEPS_LEFT_WARNING:
+                tracer.log("steps_left_warning", step=number)
+                messages.append({
+                    "role": "user",
+                    "content": f"You have {STEPS_LEFT_WARNING} steps left. Call "
+                    f"{role.submit_tool} now with everything you have so far; a submission "
+                    "that covers part of the work is far more useful than none.",
+                })
 
             if not tool_calls:
                 if role and nudges < MAX_SUBMIT_NUDGES:

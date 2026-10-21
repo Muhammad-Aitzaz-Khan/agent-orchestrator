@@ -130,6 +130,7 @@ class Round(BaseModel):
 class OrchestratorResult(BaseModel):
     run_id: str
     task: str
+    kind: Literal["fix", "create"] = "fix"
     status: Literal["completed", "unresolved", "budget_exhausted", "error"] = "unresolved"
     plan: Plan | None = None
     plan_is_fallback: bool = False
@@ -139,6 +140,8 @@ class OrchestratorResult(BaseModel):
     total_steps: int = 0
     duration_s: float = 0.0
     error: str | None = None
+    files: dict[str, str] = Field(default_factory=dict)  # created or changed files
+    diff: str = ""
 
     def tokens_by_role(self) -> dict[str, int]:
         totals: dict[str, int] = {}

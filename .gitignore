@@ -27,3 +27,5 @@ runs/
 .idea/
 .DS_Store
 Thumbs.db
+# Private drafts (launch posts, notes)
+drafts/

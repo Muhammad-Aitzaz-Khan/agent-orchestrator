@@ -15,13 +15,14 @@ from orchestrator.state import ChangeSummary, Plan, Review, Round, TestReport
 
 @dataclass(frozen=True)
 class Role:
-    name: str
+    name: str  # stable key: planner, coder, tester, or reviewer
     system_prompt: str
     tools: tuple[str, ...]
     output_model: type[BaseModel]
     submit_tool: str
     submit_description: str
     max_steps: int
+    title: str = ""  # what people see, e.g. "Builder" for the coder in create mode
 
 
 def submit_schema(role: Role) -> dict:
@@ -90,11 +91,12 @@ requirement in the plan now holds. You cannot change files.
 
 How to work:
 1. Read the relevant source files.
-2. For EACH requirement, use run_python to call the code with the inputs that requirement
-   describes and print the result. Example:
+2. Check the requirements by running code with run_python. You have a limited number of steps,
+   so check SEVERAL requirements in one script, printing one labelled line per requirement:
        from dp import min_coins
-       print(repr(min_coins([2], 3)))
-   Compare what was printed with what the requirement says. Be strict: a value that is close
+       print("R3", repr(min_coins([2], 3)))
+       print("R4", repr(min_coins([1, 2, 5], 11)))
+   Compare what was printed with what each requirement says. Be strict: a value that is close
    but not exactly what the requirement states is a failure.
 3. Run the tests as well.
 Report every requirement, with the code you ran and its output as evidence. Do not report a
@@ -120,6 +122,7 @@ When done, call submit_review."""
 
 PLANNER = Role(
     name="planner",
+    title="Planner",
     system_prompt=PLANNER_PROMPT,
     tools=("list_files", "read_file", "run_tests"),
     output_model=Plan,
@@ -130,6 +133,7 @@ PLANNER = Role(
 
 CODER = Role(
     name="coder",
+    title="Coder",
     system_prompt=CODER_PROMPT,
     tools=("list_files", "read_file", "write_file", "run_tests", "show_diff"),
     output_model=ChangeSummary,
@@ -140,6 +144,7 @@ CODER = Role(
 
 TESTER = Role(
     name="tester",
+    title="Tester",
     system_prompt=TESTER_PROMPT,
     tools=("list_files", "read_file", "run_tests", "run_python"),
     output_model=TestReport,
@@ -150,6 +155,7 @@ TESTER = Role(
 
 REVIEWER = Role(
     name="reviewer",
+    title="Reviewer",
     system_prompt=REVIEWER_PROMPT,
     tools=("read_file", "show_diff", "run_tests"),
     output_model=Review,
@@ -159,6 +165,116 @@ REVIEWER = Role(
 )
 
 ROLES = {role.name: role for role in (PLANNER, CODER, TESTER, REVIEWER)}
+
+
+# ---------- create mode: making something new from a request ----------
+# The same four seats, with prompts for producing a deliverable (text, a document, a web
+# page, or code) instead of fixing an existing project.
+
+CREATE_PLANNER_PROMPT = """You are the PLANNER in a team of four agents that turns a person's request
+into a finished deliverable: writing, a document, a web page, code, or anything else that can
+be saved as files. You only plan; you do not produce the deliverable. Another agent builds it
+from your plan, a third checks every requirement you list, and a fourth reviews the result.
+
+How to work:
+1. Read the request very carefully. If there are files in the workspace, look at them.
+2. Turn EVERY instruction and constraint into its own precise, checkable requirement:
+   format and file type, exact counts and lengths (e.g. "exactly three paragraphs"), required
+   sections and their content, tone and audience, things to include, things to avoid
+   (e.g. "no brand names"), and any rule about randomness or choice.
+3. Decide the deliverable's file name(s) and put them in files_to_change: for example
+   output.md for writing, index.html for a single web page, or .py files for code.
+Requirements must be checkable by someone reading the result, e.g. "output.md contains exactly
+three paragraphs separated by blank lines" rather than "good structure". When done, call
+submit_plan."""
+
+BUILDER_PROMPT = """You are the BUILDER in a team of four agents that turns a person's request into a
+finished deliverable. You receive a plan with numbered requirements; create a deliverable that
+satisfies ALL of them and save it with write_file, using the file names in the plan.
+
+Rules:
+- Write complete, final, polished content. No placeholders, no notes to the reader about what
+  you did, no apologies inside the deliverable.
+- If a requirement asks for a random choice, make the choice with run_python using Python's
+  random module and use what it prints. Never claim to choose randomly without doing so.
+- A web page must be one self-contained HTML file (CSS and JavaScript inline).
+- After writing, re-read the requirements and check each one against what you wrote.
+If you receive feedback from the tester or reviewer, fix exactly what it describes.
+When finished, call submit_changes."""
+
+CHECKER_PROMPT = """You are the TESTER in a team of four agents that turns a person's request into a
+finished deliverable. Another agent has written it. Check, requirement by requirement, whether
+the deliverable files satisfy the plan. You cannot change files.
+
+How to work:
+1. Read the deliverable files.
+2. For anything countable or mechanical (number of paragraphs, word counts, forbidden words,
+   required headings, whether HTML or code is valid), use run_python to measure it instead of
+   estimating. Check several requirements in one script, one labelled line each. Example:
+       text = open("output.md").read()
+       print(len([p for p in text.split("\n\n") if p.strip()]))
+3. Judge the remaining requirements by reading carefully. Be strict.
+Report every requirement with evidence. When done, call submit_test_report."""
+
+CREATE_REVIEWER_PROMPT = """You are the REVIEWER in a team of four agents that turns a person's request
+into a finished deliverable. The tester reports that every requirement passes. Give a final
+review as an expert editor would.
+
+Check that the deliverable fully answers the original request (not just the plan), is
+coherent and well written, contains nothing a person would be embarrassed to use (placeholders,
+notes about the process, contradictions, errors), and has no requirement quietly ignored.
+Use read_file and show_diff. Verdict "approve" unless there is a real problem; mark style
+preferences as "minor". When done, call submit_review."""
+
+CREATE_PLANNER = Role(
+    name="planner",
+    title="Planner",
+    system_prompt=CREATE_PLANNER_PROMPT,
+    tools=("list_files", "read_file"),
+    output_model=Plan,
+    submit_tool="submit_plan",
+    submit_description="Submit the plan: a summary, the deliverable files, and every requirement.",
+    max_steps=6,
+)
+
+BUILDER = Role(
+    name="coder",
+    title="Builder",
+    system_prompt=BUILDER_PROMPT,
+    tools=("list_files", "read_file", "write_file", "run_python", "show_diff"),
+    output_model=ChangeSummary,
+    submit_tool="submit_changes",
+    submit_description="Submit a summary of what was created once the deliverable is saved.",
+    max_steps=12,
+)
+
+CHECKER = Role(
+    name="tester",
+    title="Tester",
+    system_prompt=CHECKER_PROMPT,
+    tools=("list_files", "read_file", "run_python"),
+    output_model=TestReport,
+    submit_tool="submit_test_report",
+    submit_description="Submit one check per requirement, each with evidence.",
+    max_steps=10,
+)
+
+CREATE_REVIEWER = Role(
+    name="reviewer",
+    title="Reviewer",
+    system_prompt=CREATE_REVIEWER_PROMPT,
+    tools=("list_files", "read_file", "show_diff"),
+    output_model=Review,
+    submit_tool="submit_review",
+    submit_description="Submit the verdict (approve or revise) and any issues found.",
+    max_steps=6,
+)
+
+# kind of work -> (planner, coder, tester, reviewer)
+TEAMS: dict[str, tuple[Role, Role, Role, Role]] = {
+    "fix": (PLANNER, CODER, TESTER, REVIEWER),
+    "create": (CREATE_PLANNER, BUILDER, CHECKER, CREATE_REVIEWER),
+}
 
 
 # ---------- task messages built from the shared state ----------

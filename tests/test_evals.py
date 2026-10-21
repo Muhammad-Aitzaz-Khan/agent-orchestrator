@@ -1,5 +1,6 @@
 """Tests for the eval harness. These never call the LLM API."""
 import importlib.util
+import json
 import shutil
 from pathlib import Path
 
@@ -147,3 +148,23 @@ def test_multi_mode_end_to_end_on_a_real_task(tmp_path, monkeypatch):
     assert row["outcome"] == "pass"
     assert row["rounds"] == 1
     assert row["tokens_by_role"] == {"planner": 100, "coder": 200, "tester": 100, "reviewer": 100}
+
+
+def test_rescore_rebuilds_final_code_from_traces(tmp_path):
+    spec2 = importlib.util.spec_from_file_location("rescore", ROOT / "evals" / "rescore.py")
+    rescore = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(rescore)
+
+    fixed = (ROOT / "evals/tasks/easy_calculator/solution/calculator.py").read_text()
+    trace = tmp_path / "run1.jsonl"
+    trace.write_text("\n".join(json.dumps(e) for e in [
+        {"event": "tool_call", "name": "write_file", "output": "Wrote 10 characters",
+         "arguments": json.dumps({"path": "calculator.py", "content": "broken"})},
+        {"event": "tool_call", "name": "write_file", "output": "Error: protected",
+         "arguments": json.dumps({"path": "test_calculator.py", "content": "x"})},
+        {"event": "tool_call", "name": "write_file", "output": "Wrote 300 characters",
+         "arguments": json.dumps({"path": "calculator.py", "content": fixed})},
+    ]))
+    row = {"task": "easy_calculator", "outcome": "fail", "run_id": "run1"}
+    new = rescore.rescore_row(row, easy_task(), tmp_path)
+    assert new["outcome"] == "pass" and new["rescored_from"] == "fail"

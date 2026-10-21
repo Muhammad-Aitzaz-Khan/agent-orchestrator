@@ -30,13 +30,13 @@ from pathlib import Path
 from orchestrator.agent import default_model, run_agent
 from orchestrator.orchestrator import run_orchestrator
 from orchestrator.state import OrchestratorResult, RunResult
-from orchestrator.tools import _clean_env, _is_protected
+from orchestrator.tools import _is_protected, run_python_process
 
 TASKS_DIR = Path(__file__).parent / "tasks"
 RESULTS_DIR = Path(__file__).parent / "results"
 JUDGE_TIMEOUT_S = 60
 DIFFICULTIES = ["easy", "medium", "hard"]
-MODES = ["single", "multi"]
+MODES = ["single", "multi", "plan-code"]
 IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache")
 
 Agent = Callable[..., RunResult | OrchestratorResult]
@@ -47,7 +47,12 @@ def run_team(prompt: str, root: Path, max_steps: int) -> OrchestratorResult:
     return run_orchestrator(prompt, root)
 
 
-AGENTS: dict[str, Agent] = {"single": run_agent, "multi": run_team}
+def run_plan_code(prompt: str, root: Path, max_steps: int) -> OrchestratorResult:
+    """Ablation: Planner and Coder only, to measure what the Tester and Reviewer add."""
+    return run_orchestrator(prompt, root, checkers=False)
+
+
+AGENTS: dict[str, Agent] = {"single": run_agent, "multi": run_team, "plan-code": run_plan_code}
 
 
 # ---------- loading tasks ----------
@@ -103,16 +108,8 @@ def judge(workspace: Path) -> tuple[bool, str, list[str]]:
     Returns (passed, pytest's summary line, names of failing tests).
     """
     try:
-        proc = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "."],
-            check=False,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=JUDGE_TIMEOUT_S,
-            env=_clean_env(),
+        proc = run_python_process(
+            ["-m", "pytest", "-q", "-p", "no:cacheprovider", "."], workspace, JUDGE_TIMEOUT_S
         )
     except subprocess.TimeoutExpired:
         return False, "judge timed out", []
@@ -321,7 +318,8 @@ def main() -> None:
     parser.add_argument("--check-tasks", action="store_true", help="validate tasks without the API")
     parser.add_argument(
         "--mode", choices=MODES, default="single",
-        help="single: one agent (the baseline). multi: planner, coder, tester, and reviewer",
+        help="single: one agent (the baseline). multi: planner, coder, tester, and reviewer. "
+        "plan-code: planner and coder only (to measure what the checkers add)",
     )
     parser.add_argument(
         "--retry-errors", type=Path, metavar="FILE",

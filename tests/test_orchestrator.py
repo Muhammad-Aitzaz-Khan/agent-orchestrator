@@ -210,3 +210,97 @@ def test_unresolved_after_max_rounds(project):
     result, _ = run(project, planner_ok() + coder_does_nothing() * 2, max_rounds=2)
     assert result.status == "unresolved"
     assert [r.decision for r in result.rounds] == ["revise: visible tests fail"] * 2
+
+
+# ---------- create mode ----------
+
+THREE_PARAGRAPHS = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.\n"
+CREATE_PLAN = {
+    "summary": "Write a three-paragraph prompt in a randomly chosen style.",
+    "files_to_change": ["output.md"],
+    "requirements": [
+        {"id": "R1", "description": "output.md has exactly three paragraphs", "source": "request"},
+        {"id": "R2", "description": "the style is chosen at random", "source": "request"},
+    ],
+}
+
+
+@pytest.fixture
+def empty_workspace(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    return workspace
+
+
+def create_script():
+    pick = "import random\nprint(random.choice(['Bauhaus', 'Art Deco', 'Japandi']))"
+    count = ("text = open('output.md').read()\n"
+             "print(len([p for p in text.split('\\n\\n') if p.strip()]))")
+    return [
+        call("submit_plan", CREATE_PLAN),
+        call("run_python", {"code": pick}),
+        call("write_file", {"path": "output.md", "content": THREE_PARAGRAPHS}),
+        call("submit_changes", {"summary": "wrote output.md", "files_changed": ["output.md"]}),
+        call("run_python", {"code": count}),
+        call("submit_test_report", {"checks": [
+            {"requirement_id": "R1", "passed": True, "evidence": "counted 3"},
+            {"requirement_id": "R2", "passed": True, "evidence": "random.choice was used"}]}),
+        call("submit_review", APPROVE),
+    ]
+
+
+def test_create_mode_produces_a_deliverable(empty_workspace):
+    updates = []
+    result, client = run(empty_workspace, create_script(), kind="create",
+                         on_update=updates.append)
+    assert result.status == "completed"
+    assert result.kind == "create"
+    assert result.files == {"output.md": THREE_PARAGRAPHS}
+    assert result.rounds[0].visible_tests_passed is None  # no tests, so no gate
+    assert any(o.startswith("exit code 0\n3") for o in tool_results(client))  # tester counted
+    # the create team was used: the builder may run Python, the fix-mode coder may not
+    builder_tools = [t["function"]["name"] for t in client.requests[1]["tools"]]
+    assert "run_python" in builder_tools
+
+
+def test_create_mode_streams_structured_updates(empty_workspace):
+    updates = []
+    run(empty_workspace, create_script(), kind="create", on_update=updates.append)
+    types = [u["type"] for u in updates]
+    assert types[0] == "run_started" and types[-1] == "run_finished"
+    started = updates[0]
+    assert [r["title"] for r in started["roles"]] == ["Planner", "Builder", "Tester", "Reviewer"]
+    submitted = {u["role"]: u["output"] for u in updates if u["type"] == "agent_submitted"}
+    assert submitted["planner"]["requirements"][0]["id"] == "R1"
+    assert submitted["reviewer"]["verdict"] == "approve"
+    steps = [u for u in updates if u["type"] == "agent_step" and u["role"] == "coder"]
+    assert steps[0]["tools"][0]["name"] == "run_python"
+    assert all(t["name"] != "submit_changes" for s in steps for t in s["tools"])
+    finished = updates[-1]
+    assert finished["status"] == "completed" and "output.md" in finished["files"]
+    assert "+Third paragraph." in finished["diff"]
+
+
+def test_fix_mode_reports_changed_files_and_diff(project):
+    result, _ = run(project, planner_ok() + coder_fixes() + all_checks_pass() + reviewer_approves())
+    assert result.files == {"mathlib.py": FIXED}  # tests and config unchanged, so not listed
+    assert "-    return x + 2" in result.diff and "+    return x * 2" in result.diff
+
+
+def test_unknown_kind_is_rejected(project):
+    with pytest.raises(ValueError):
+        run_orchestrator("x", project, client=FakeClient([]), kind="dance")
+
+
+def test_plan_code_mode_skips_the_checkers(project):
+    result, _ = run(project, planner_ok() + coder_fixes(), checkers=False)
+    assert result.status == "completed"
+    assert [r.role for r in result.agent_runs] == ["planner", "coder"]
+    assert result.rounds[0].decision == "accept: checkers disabled"
+
+
+def test_plan_code_mode_still_revises_when_tests_fail(project):
+    result, _ = run(project, planner_ok() + coder_does_nothing() + coder_fixes(), checkers=False)
+    assert result.status == "completed"
+    assert [r.decision for r in result.rounds] == ["revise: visible tests fail", "accept: checkers disabled"]

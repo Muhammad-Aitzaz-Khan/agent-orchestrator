@@ -13,9 +13,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+web = [
+    "fastapi",
+    "uvicorn",
+]
 dev = [
     "pytest",
     "ruff",
+    "httpx",
+    "fastapi",
+    "uvicorn",
 ]
 
 [build-system]
@@ -25,8 +32,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"orchestrator.web" = ["static/*", "replays/*.jsonl"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# The eval tasks contain deliberate bugs. Never let a linter "fix" them.
+extend-exclude = ["evals/tasks"]

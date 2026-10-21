@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -179,6 +180,65 @@ def _clean_env() -> dict[str, str]:
     return env
 
 
+# ---------- running model-written code ----------
+#
+# Two backends, chosen with the SANDBOX environment variable:
+#   local  (default) a normal subprocess, with secrets removed from its environment.
+#   docker  a throwaway container: no network, read-only filesystem except the project
+#           folder and /tmp, an unprivileged user, and memory, CPU, and process limits.
+
+DEFAULT_SANDBOX_IMAGE = "orchestrator-sandbox"
+
+
+def sandbox_mode() -> str:
+    mode = os.getenv("SANDBOX", "local").strip().lower()
+    if mode not in ("local", "docker"):
+        raise ValueError(f"SANDBOX must be 'local' or 'docker', not {mode!r}")
+    return mode
+
+
+def run_python_process(
+    args: list[str], cwd: Path, timeout: int, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
+    """Run `python <args>` in cwd with the configured sandbox. Raises TimeoutExpired."""
+    if sandbox_mode() == "local":
+        return subprocess.run(  # non-zero exit codes are expected and handled by callers
+            [sys.executable, *args],
+            check=False,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env={**_clean_env(), **(extra_env or {})},
+        )
+
+    name = f"orch-sandbox-{uuid.uuid4().hex[:12]}"
+    env_flags = []
+    for key, value in {"PYTHONDONTWRITEBYTECODE": "1", **(extra_env or {})}.items():
+        env_flags += ["-e", f"{key}={value}"]
+    command = [
+        "docker", "run", "--rm", "--name", name,
+        "--network", "none",
+        "--user", "65534:65534",
+        "--read-only", "--tmpfs", "/tmp:size=64m",
+        "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
+        "-v", f"{Path(cwd).resolve()}:/work", "-w", "/work",
+        *env_flags,
+        os.getenv("SANDBOX_IMAGE", DEFAULT_SANDBOX_IMAGE),
+        "python", *args,
+    ]
+    try:
+        return subprocess.run(
+            command, check=False, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        subprocess.run(["docker", "kill", name], check=False, capture_output=True, timeout=30)
+        raise
+
+
 # ---------- the tools ----------
 
 def list_files(root: Path) -> str:
@@ -213,18 +273,9 @@ def write_file(root: Path, path: str, content: str) -> str:
 
 
 def run_tests(root: Path) -> str:
-    command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "."]
     try:
-        proc = subprocess.run(  # non-zero exit codes are expected and handled below
-            command,
-            check=False,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=TEST_TIMEOUT_S,
-            env=_clean_env(),
+        proc = run_python_process(
+            ["-m", "pytest", "-q", "-p", "no:cacheprovider", "."], root, TEST_TIMEOUT_S
         )
     except subprocess.TimeoutExpired:
         raise ToolError(
@@ -264,16 +315,9 @@ def run_python(root: Path, code: str) -> str:
     with tempfile.TemporaryDirectory(prefix="run_python_", ignore_cleanup_errors=True) as tmp:
         sandbox = copy_project(root, Path(tmp) / "project")
         try:
-            proc = subprocess.run(
-                [sys.executable, "-c", code],
-                check=False,
-                cwd=sandbox,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=PYTHON_TIMEOUT_S,
-                env={**_clean_env(), "PYTHONPATH": str(sandbox)},
+            proc = run_python_process(
+                ["-c", code], sandbox, PYTHON_TIMEOUT_S,
+                extra_env={"PYTHONPATH": "/work" if sandbox_mode() == "docker" else str(sandbox)},
             )
         except subprocess.TimeoutExpired:
             raise ToolError(f"the script ran longer than {PYTHON_TIMEOUT_S}s and was stopped.")
