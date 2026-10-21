@@ -71,3 +71,34 @@ def test_summary_excludes_api_errors():
     assert (s["passed"], s["scored"], s["errors"]) == (1, 2, 1)
     assert s["pass_rate"] == 0.5
     assert s["avg_tokens"] == 200
+
+
+def test_judge_reports_failing_test_names(tmp_path):
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    (tmp_path / "test_x.py").write_text("def test_good():\n    pass\n\ndef test_bad():\n    assert False\n")
+    passed, _, failed = run_evals.judge(tmp_path)
+    assert not passed
+    assert failed == ["test_x.py::test_bad"]
+
+
+def row(task, outcome, error=None):
+    return {"task": task, "outcome": outcome, "error": error}
+
+
+def test_merge_replaces_errors_with_new_attempts():
+    previous = [row("a", "pass"), row("b", "error", "x"), row("b", "error", "x"), row("c", "fail")]
+    new = [row("b", "pass"), row("b", "fail")]
+    merged = run_evals.merge_results(previous, new)
+    assert [r["outcome"] for r in merged] == ["pass", "pass", "fail", "fail"]
+
+
+def test_merge_keeps_errors_that_were_not_rerun():
+    previous = [row("a", "error", "x"), row("b", "error", "x")]
+    merged = run_evals.merge_results(previous, [row("a", "pass")])
+    assert [r["outcome"] for r in merged] == ["pass", "error"]
+
+
+def test_daily_limit_row_detection():
+    assert run_evals.is_daily_limit_row(row("a", "error", "DailyLimitReached: tokens per day"))
+    assert not run_evals.is_daily_limit_row(row("a", "error", "RateLimitError: per minute"))
+    assert not run_evals.is_daily_limit_row(row("a", "fail"))

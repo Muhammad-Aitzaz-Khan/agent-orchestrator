@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI, OpenAIError
+from openai import OpenAI, OpenAIError, RateLimitError
 
 from orchestrator.state import RunResult, Step, ToolCall
 from orchestrator.tools import TOOL_SCHEMAS, execute_tool
@@ -26,6 +26,51 @@ SYSTEM_PROMPT = (
 )
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+MAX_RATE_LIMIT_WAITS = 5  # retries per model call for short (per-minute) limits
+MAX_WAIT_S = 90  # never sleep longer than this for one retry
+
+
+class DailyLimitReached(Exception):
+    """The provider's per-day quota is used up. Retrying today will not help."""
+
+
+def is_daily_limit(error: Exception) -> bool:
+    text = str(error).lower()
+    return "per day" in text or "(tpd)" in text or "(rpd)" in text
+
+
+def retry_after_seconds(error: Exception, attempt: int) -> float:
+    """How long to wait before retrying: the provider's retry-after header if present,
+    otherwise exponential backoff (2, 4, 8, ... seconds)."""
+    response = getattr(error, "response", None)
+    header = response.headers.get("retry-after") if response is not None else None
+    try:
+        wait = float(header) + 1 if header is not None else 2.0 ** (attempt + 1)
+    except ValueError:
+        wait = 2.0 ** (attempt + 1)
+    return min(wait, MAX_WAIT_S)
+
+
+def call_model(
+    client: OpenAI, tracer: Tracer, sleep: Callable[[float], None] = time.sleep, **kwargs
+):
+    """Call the model, waiting and retrying on short rate limits.
+
+    Raises DailyLimitReached when the daily quota is exhausted, and re-raises the last
+    RateLimitError if waiting did not help.
+    """
+    for attempt in range(MAX_RATE_LIMIT_WAITS + 1):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except RateLimitError as e:
+            if is_daily_limit(e):
+                raise DailyLimitReached(str(e)) from e
+            if attempt == MAX_RATE_LIMIT_WAITS:
+                raise
+            wait = retry_after_seconds(e, attempt)
+            tracer.log("rate_limited", attempt=attempt + 1, wait_s=wait)
+            sleep(wait)
 
 
 def make_client() -> OpenAI:
@@ -53,6 +98,7 @@ def run_agent(
     client: OpenAI | None = None,
     on_step: Callable[[Step], None] | None = None,
     system_prompt: str = SYSTEM_PROMPT,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> RunResult:
     """Run one agent on a task and return everything that happened."""
     root = (root or Path.cwd()).resolve()
@@ -73,8 +119,8 @@ def run_agent(
     try:
         for number in range(1, max_steps + 1):
             t0 = time.perf_counter()
-            response = client.chat.completions.create(
-                model=model, messages=messages, tools=TOOL_SCHEMAS
+            response = call_model(
+                client, tracer, sleep, model=model, messages=messages, tools=TOOL_SCHEMAS
             )
             latency_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -116,6 +162,9 @@ def run_agent(
                 result.status = "completed"
                 result.final_answer = message.content
                 break
+    except DailyLimitReached as e:
+        result.status = "error"
+        result.error = f"DailyLimitReached: {e}"
     except OpenAIError as e:
         result.status = "error"
         result.error = f"{type(e).__name__}: {e}"

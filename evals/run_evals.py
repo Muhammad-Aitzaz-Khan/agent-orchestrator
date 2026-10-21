@@ -5,6 +5,7 @@ Usage:
     python evals/run_evals.py                        # run every task once
     python evals/run_evals.py --difficulty easy
     python evals/run_evals.py --task calculator --repeats 3
+    python evals/run_evals.py --retry-errors evals/results/<file>.json   # rerun only API errors
 
 Each task folder looks like:
     evals/tasks/<name>/
@@ -85,8 +86,11 @@ def add_hidden_tests(task: dict, workspace: Path) -> None:
         shutil.copytree(hidden, workspace, dirs_exist_ok=True, ignore=IGNORE)
 
 
-def judge(workspace: Path) -> tuple[bool, str]:
-    """Run the tests ourselves. Never trust the agent's own claim of success."""
+def judge(workspace: Path) -> tuple[bool, str, list[str]]:
+    """Run the tests ourselves. Never trust the agent's own claim of success.
+
+    Returns (passed, pytest's summary line, names of failing tests).
+    """
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "."],
@@ -99,9 +103,14 @@ def judge(workspace: Path) -> tuple[bool, str]:
             env=_clean_env(),
         )
     except subprocess.TimeoutExpired:
-        return False, "judge timed out"
+        return False, "judge timed out", []
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
-    return proc.returncode == 0, (lines[-1] if lines else "(no output)")
+    failed = [
+        line.split(" ", 1)[1].split(" - ", 1)[0]
+        for line in lines
+        if line.startswith(("FAILED ", "ERROR "))
+    ]
+    return proc.returncode == 0, (lines[-1] if lines else "(no output)"), failed
 
 
 # ---------- running the agent ----------
@@ -119,7 +128,7 @@ def run_one(task: dict, max_steps: int, agent: Agent = run_agent) -> dict:
 
         restore_protected_files(task["dir"] / "repo", workspace)
         add_hidden_tests(task, workspace)
-        passed, test_summary = judge(workspace)
+        passed, test_summary, failed_tests = judge(workspace)
 
     if result.status == "error":
         outcome = "error"  # API problem (e.g. rate limit), not the agent's fault
@@ -132,6 +141,7 @@ def run_one(task: dict, max_steps: int, agent: Agent = run_agent) -> dict:
         "outcome": outcome,
         "agent_status": result.status,
         "test_summary": test_summary,
+        "failed_tests": failed_tests,
         "steps": len(result.steps),
         "tokens": result.total_tokens,
         "duration_s": result.duration_s,
@@ -148,7 +158,7 @@ def check_task(task: dict) -> list[str]:
     with tempfile.TemporaryDirectory(prefix="check_", ignore_cleanup_errors=True) as tmp:
         workspace = prepare_workspace(task, Path(tmp))
         add_hidden_tests(task, workspace)
-        passed, _ = judge(workspace)
+        passed, _, _ = judge(workspace)
         if passed:
             problems.append("buggy repo already passes all tests (nothing to fix)")
 
@@ -161,7 +171,7 @@ def check_task(task: dict) -> list[str]:
         workspace = prepare_workspace(task, Path(tmp))
         shutil.copytree(solution, workspace, dirs_exist_ok=True, ignore=IGNORE)
         add_hidden_tests(task, workspace)
-        passed, summary = judge(workspace)
+        passed, summary, _ = judge(workspace)
         if not passed:
             problems.append(f"solution does not pass the tests ({summary})")
     return problems
@@ -210,6 +220,9 @@ def print_report(rows: list[dict], summary: dict[str, dict]) -> None:
             f"{r['task']:<28}{r['difficulty']:<8}{r['outcome'].upper():<8}"
             f"{r['steps']:>6}{r['tokens']:>9}{r['duration_s']:>8.1f}s"
         )
+        if r["outcome"] == "fail":
+            for name in r.get("failed_tests", []):
+                print(f"    failed: {name}")
     print()
     for level, s in summary.items():
         line = (
@@ -224,6 +237,51 @@ def print_report(rows: list[dict], summary: dict[str, dict]) -> None:
 
 # ---------- main ----------
 
+def is_daily_limit_row(row: dict) -> bool:
+    return row["outcome"] == "error" and "DailyLimitReached" in (row.get("error") or "")
+
+
+def merge_results(previous: list[dict], new: list[dict]) -> list[dict]:
+    """Replace the previous error rows with the new attempts.
+
+    Error rows that were not rerun (because the run stopped early) are kept, so nothing is lost.
+    """
+    remaining = list(new)
+    merged = []
+    for row in previous:
+        if row["outcome"] != "error":
+            merged.append(row)
+            continue
+        match = next((r for r in remaining if r["task"] == row["task"]), None)
+        if match is not None:
+            remaining.remove(match)
+            merged.append(match)
+        else:
+            merged.append(row)
+    return merged
+
+
+def save_results(
+    out_file: Path, model: str, args: argparse.Namespace, rows: list[dict], complete: bool
+) -> None:
+    RESULTS_DIR.mkdir(exist_ok=True)
+    out_file.write_text(
+        json.dumps(
+            {
+                "date": datetime.now().isoformat(timespec="seconds"),
+                "model": model,
+                "max_steps": args.max_steps,
+                "repeats": args.repeats,
+                "complete": complete,
+                "summary": summarize(rows),
+                "results": rows,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the agent on the eval tasks.")
     parser.add_argument("--difficulty", choices=DIFFICULTIES)
@@ -232,47 +290,79 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=15)
     parser.add_argument("--delay", type=float, default=5.0, help="seconds between runs (rate limits)")
     parser.add_argument("--check-tasks", action="store_true", help="validate tasks without the API")
+    parser.add_argument(
+        "--retry-errors", type=Path, metavar="FILE",
+        help="rerun only the runs that hit API errors in a previous results file",
+    )
     args = parser.parse_args()
 
-    tasks = load_tasks(args.difficulty, args.task)
-    if not tasks:
-        sys.exit("No matching tasks found.")
+    all_tasks = {t["id"]: t for t in load_tasks()}
+    previous: list[dict] = []
+    if args.retry_errors:
+        data = json.loads(args.retry_errors.read_text(encoding="utf-8"))
+        previous = data["results"]
+        args.repeats = data.get("repeats", 1)
+        runs = [
+            all_tasks[r["task"]]
+            for r in previous
+            if r["outcome"] == "error" and r["task"] in all_tasks
+        ]
+        if not runs:
+            sys.exit("That results file has no errored runs to retry.")
+    else:
+        tasks = load_tasks(args.difficulty, args.task)
+        if not tasks:
+            sys.exit("No matching tasks found.")
+        if args.check_tasks:
+            sys.exit(0 if check_tasks(tasks) else 1)
+        runs = [task for task in tasks for _ in range(args.repeats)]
 
-    if args.check_tasks:
-        sys.exit(0 if check_tasks(tasks) else 1)
-
-    runs = [task for task in tasks for _ in range(args.repeats)]
     model = default_model()
+    out_file = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.json"
     print(f"Running {len(runs)} run(s) with model {model}\n")
 
-    rows = []
+    new_rows: list[dict] = []
+    stopped_early = False
     for i, task in enumerate(runs, start=1):
         print(f"[{i}/{len(runs)}] {task['id']} ...", end=" ", flush=True)
         row = run_one(task, args.max_steps)
-        rows.append(row)
-        print(f"{row['outcome'].upper()}  ({row['error'] or row['test_summary']})")
+        new_rows.append(row)
+        detail = (row["error"] or "")[:120] if row["outcome"] == "error" else row["test_summary"]
+        print(f"{row['outcome'].upper()}  ({detail})")
+
+        rows = merge_results(previous, new_rows) if previous else new_rows
+        save_results(out_file, model, args, rows, complete=False)  # saved after every run
+
+        if is_daily_limit_row(row):
+            stopped_early = True
+            try:
+                shown = out_file.relative_to(Path.cwd()).as_posix()
+            except ValueError:
+                shown = out_file.as_posix()
+            print(
+                "\nDaily API limit reached, so the remaining runs were skipped.\n"
+                f"When the limit resets, continue with:\n"
+                f"    python evals/run_evals.py --retry-errors {shown}"
+            )
+            break
         if i < len(runs):
             time.sleep(args.delay)
 
-    summary = summarize(rows)
-    print_report(rows, summary)
-
-    RESULTS_DIR.mkdir(exist_ok=True)
-    out_file = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.json"
-    out_file.write_text(
-        json.dumps(
+    rows = merge_results(previous, new_rows) if previous else new_rows
+    if stopped_early and not previous:
+        ran = len(new_rows)
+        rows = rows + [
             {
-                "date": datetime.now().isoformat(timespec="seconds"),
-                "model": model,
-                "max_steps": args.max_steps,
-                "repeats": args.repeats,
-                "summary": summary,
-                "results": rows,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+                "task": t["id"], "difficulty": t["difficulty"], "outcome": "error",
+                "agent_status": "error", "test_summary": "not run", "failed_tests": [],
+                "steps": 0, "tokens": 0, "duration_s": 0.0, "run_id": "-",
+                "error": "DailyLimitReached: skipped",
+            }
+            for t in runs[ran:]
+        ]
+    complete = not any(r["outcome"] == "error" for r in rows)
+    save_results(out_file, model, args, rows, complete=complete)
+    print_report(rows, summarize(rows))
     print(f"\nSaved: {out_file}")
 
 

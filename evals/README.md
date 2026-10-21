@@ -10,9 +10,21 @@ python evals/run_evals.py --check-tasks          # validate every task, no API c
 python evals/run_evals.py --repeats 3            # full run, 3 attempts per task
 python evals/run_evals.py --difficulty hard
 python evals/run_evals.py --task parser --repeats 5
+python evals/run_evals.py --retry-errors evals/results/<file>.json   # rerun only API errors
 ```
 
-Results are printed per difficulty and saved to `evals/results/<timestamp>.json`.
+Results are printed per difficulty and saved to `evals/results/<timestamp>.json` after every
+run, so an interrupted eval loses nothing. Failing runs list the names of the tests that failed.
+
+## Free-tier limits
+
+Groq's free tier limits tokens per minute and per day (for `openai/gpt-oss-120b`, about 8,000
+per minute and 200,000 per day). One task run uses roughly 7,000-12,000 tokens, so a full
+`--repeats 3` run (45 runs) needs about two days of quota.
+
+- Per-minute limits: the agent waits for the time the API asks for and retries automatically.
+- Daily limit: the eval stops, saves what it has, and prints the `--retry-errors` command to
+  finish the remaining runs once the limit resets.
 
 ## How a run is judged
 
