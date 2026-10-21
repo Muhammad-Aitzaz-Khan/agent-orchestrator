@@ -25,6 +25,14 @@ per minute and 200,000 per day). One task run uses roughly 7,000-12,000 tokens, 
 - Per-minute limits: the agent waits for the time the API asks for and retries automatically.
 - Daily limit: the eval stops, saves what it has, and prints the `--retry-errors` command to
   finish the remaining runs once the limit resets.
+- Request size: Groq rejects any single request over ~8,000 tokens. Long runs are kept under
+  `LLM_MAX_CONTEXT_CHARS` (default 20,000) by shortening old tool outputs, then dropping the
+  oldest steps (see `src/orchestrator/context.py`).
+- Malformed tool calls that the provider rejects are retried automatically.
+
+To use a different provider, such as Gemini's free tier, see `.env.example` and check the setup
+with `python -m orchestrator.doctor`. Results from different models are not directly comparable,
+so record the model (it is saved in every results file).
 
 ## How a run is judged
 

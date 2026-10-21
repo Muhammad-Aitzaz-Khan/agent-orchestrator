@@ -120,3 +120,47 @@ def test_long_retry_after_is_capped(in_tmp):
                          completion(content="ok")])
     _, waits = run(client, root=in_tmp)
     assert waits == [agent.MAX_WAIT_S]
+
+
+def bad_request(message):
+    response = httpx.Response(400, request=httpx.Request("POST", "http://test"))
+    return openai.BadRequestError(message, response=response, body=None)
+
+
+TOOL_VALIDATION = "Tool call validation failed: parameters for tool write_file did not match schema"
+
+
+def test_retries_malformed_tool_call(in_tmp):
+    client = FakeClient([bad_request(TOOL_VALIDATION), completion(content="done")])
+    result, waits = run(client, root=in_tmp)
+    assert result.status == "completed"
+    assert len(client.requests) == 2
+    assert waits == []  # no waiting needed, just ask again
+
+
+def test_gives_up_on_repeated_malformed_tool_calls(in_tmp):
+    client = FakeClient([bad_request(TOOL_VALIDATION)] * (agent.MAX_BAD_TOOL_CALL_RETRIES + 1))
+    result, _ = run(client, root=in_tmp)
+    assert result.status == "error"
+    assert "BadRequestError" in result.error
+
+
+def test_other_bad_requests_are_not_retried(in_tmp):
+    client = FakeClient([bad_request("model does not exist")])
+    result, _ = run(client, root=in_tmp)
+    assert result.status == "error"
+    assert len(client.requests) == 1
+
+
+def test_requests_stay_under_context_budget(in_tmp):
+    (in_tmp / "big.py").write_text("x = 1\n" * 1500)  # read_file returns 5,000 characters
+    client = FakeClient(
+        [completion(tool_calls=[("read_file", {"path": "big.py"})])] * 8 + [completion(content="ok")]
+    )
+    result, _ = run(client, root=in_tmp, max_steps=10, context_chars=12_000)
+    assert result.status == "completed"
+    sizes = [agent.conversation_size(r["messages"]) for r in client.requests]
+    # without compaction the last request would be 8 reads x 5,000 characters = 40,000+;
+    # with it, the size levels off instead of growing every step
+    assert max(sizes) < 14_000
+    assert sizes[-1] - sizes[-4] < 500
