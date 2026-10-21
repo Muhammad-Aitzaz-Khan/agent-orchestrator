@@ -6,6 +6,7 @@ Usage:
     python evals/run_evals.py --difficulty easy
     python evals/run_evals.py --task calculator --repeats 3
     python evals/run_evals.py --retry-errors evals/results/<file>.json   # rerun only API errors
+    python evals/run_evals.py --mode multi            # the four-agent team instead of one agent
 
 Each task folder looks like:
     evals/tasks/<name>/
@@ -27,16 +28,26 @@ from datetime import datetime
 from pathlib import Path
 
 from orchestrator.agent import default_model, run_agent
-from orchestrator.state import RunResult
+from orchestrator.orchestrator import run_orchestrator
+from orchestrator.state import OrchestratorResult, RunResult
 from orchestrator.tools import _clean_env, _is_protected
 
 TASKS_DIR = Path(__file__).parent / "tasks"
 RESULTS_DIR = Path(__file__).parent / "results"
 JUDGE_TIMEOUT_S = 60
 DIFFICULTIES = ["easy", "medium", "hard"]
+MODES = ["single", "multi"]
 IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache")
 
-Agent = Callable[..., RunResult]
+Agent = Callable[..., RunResult | OrchestratorResult]
+
+
+def run_team(prompt: str, root: Path, max_steps: int) -> OrchestratorResult:
+    """The four-agent team. Each role has its own step limit, so max_steps is not used."""
+    return run_orchestrator(prompt, root)
+
+
+AGENTS: dict[str, Agent] = {"single": run_agent, "multi": run_team}
 
 
 # ---------- loading tasks ----------
@@ -94,6 +105,7 @@ def judge(workspace: Path) -> tuple[bool, str, list[str]]:
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "."],
+            check=False,
             cwd=workspace,
             capture_output=True,
             text=True,
@@ -121,7 +133,7 @@ def run_one(task: dict, max_steps: int, agent: Agent = run_agent) -> dict:
 
         try:
             result = agent(task["prompt"], root=workspace, max_steps=max_steps)
-        except Exception as e:  # e.g. missing API key; record it instead of losing the whole run
+        except Exception as e:  # noqa: BLE001 - e.g. missing API key; record it, keep going
             result = RunResult(
                 run_id="-", task=task["prompt"], status="error", error=f"{type(e).__name__}: {e}"
             )
@@ -135,19 +147,24 @@ def run_one(task: dict, max_steps: int, agent: Agent = run_agent) -> dict:
     else:
         outcome = "pass" if passed else "fail"
 
-    return {
+    row = {
         "task": task["id"],
         "difficulty": task["difficulty"],
         "outcome": outcome,
         "agent_status": result.status,
         "test_summary": test_summary,
         "failed_tests": failed_tests,
-        "steps": len(result.steps),
+        "steps": len(result.steps) if isinstance(result, RunResult) else result.total_steps,
         "tokens": result.total_tokens,
         "duration_s": result.duration_s,
         "run_id": result.run_id,
         "error": result.error,
     }
+    if isinstance(result, OrchestratorResult):
+        row["rounds"] = len(result.rounds)
+        row["tokens_by_role"] = result.tokens_by_role()
+        row["plan_requirements"] = len(result.plan.requirements) if result.plan else 0
+    return row
 
 
 # ---------- checking the tasks themselves ----------
@@ -281,6 +298,7 @@ def save_results(
             {
                 "date": datetime.now().isoformat(timespec="seconds"),
                 "model": model,
+                "mode": args.mode,
                 "max_steps": args.max_steps,
                 "repeats": args.repeats,
                 "complete": complete,
@@ -302,6 +320,10 @@ def main() -> None:
     parser.add_argument("--delay", type=float, default=5.0, help="seconds between runs (rate limits)")
     parser.add_argument("--check-tasks", action="store_true", help="validate tasks without the API")
     parser.add_argument(
+        "--mode", choices=MODES, default="single",
+        help="single: one agent (the baseline). multi: planner, coder, tester, and reviewer",
+    )
+    parser.add_argument(
         "--retry-errors", type=Path, metavar="FILE",
         help="rerun only the runs that hit API errors in a previous results file",
     )
@@ -313,6 +335,7 @@ def main() -> None:
         data = json.loads(args.retry_errors.read_text(encoding="utf-8"))
         previous = data["results"]
         args.repeats = data.get("repeats", 1)
+        args.mode = data.get("mode", "single")  # keep the mode the original run used
         runs = [
             all_tasks[r["task"]]
             for r in previous
@@ -330,13 +353,13 @@ def main() -> None:
 
     model = default_model()
     out_file = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.json"
-    print(f"Running {len(runs)} run(s) with model {model}\n")
+    print(f"Running {len(runs)} run(s) in {args.mode} mode with model {model}\n")
 
     new_rows: list[dict] = []
     stopped_early = False
     for i, task in enumerate(runs, start=1):
         print(f"[{i}/{len(runs)}] {task['id']} ...", end=" ", flush=True)
-        row = run_one(task, args.max_steps)
+        row = run_one(task, args.max_steps, AGENTS[args.mode])
         new_rows.append(row)
         detail = (row["error"] or "")[:120] if row["outcome"] == "error" else row["test_summary"]
         print(f"{row['outcome'].upper()}  ({detail})")

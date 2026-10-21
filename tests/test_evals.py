@@ -114,3 +114,36 @@ def test_provider_down_after_streak_of_dead_runs():
     worked = {"task": "a", "outcome": "fail", "steps": 6, "error": None}
     assert not run_evals.provider_down([dead(), worked, dead(), dead()][:3])
     assert not run_evals.provider_down([dead(), dead(), worked])
+
+
+def test_multi_mode_end_to_end_on_a_real_task(tmp_path, monkeypatch):
+    """The four-agent team, driven by a scripted model, fixes easy_calculator in the harness."""
+    from test_agent import FakeClient, completion
+
+    from orchestrator.orchestrator import run_orchestrator
+
+    monkeypatch.chdir(tmp_path)
+    fixed = (ROOT / "evals/tasks/easy_calculator/solution/calculator.py").read_text()
+
+    def call(name, args):
+        return completion(tool_calls=[(name, args)])
+
+    script = [
+        call("submit_plan", {"summary": "three bugs", "files_to_change": ["calculator.py"],
+                             "requirements": [{"id": "R1", "description": "add adds",
+                                               "source": "test"}]}),
+        call("write_file", {"path": "calculator.py", "content": fixed}),
+        call("submit_changes", {"summary": "fixed", "files_changed": ["calculator.py"]}),
+        call("submit_test_report", {"checks": [{"requirement_id": "R1", "passed": True,
+                                                "evidence": "add(2, 3) printed 5"}]}),
+        call("submit_review", {"verdict": "approve", "issues": []}),
+    ]
+
+    def team(prompt, root, max_steps):
+        return run_orchestrator(prompt, root, client=FakeClient(script), sleep=lambda s: None,
+                                models=dict.fromkeys(("planner", "coder", "tester", "reviewer"), "f"))
+
+    row = run_evals.run_one(easy_task(), 15, agent=team)
+    assert row["outcome"] == "pass"
+    assert row["rounds"] == 1
+    assert row["tokens_by_role"] == {"planner": 100, "coder": 200, "tester": 100, "reviewer": 100}

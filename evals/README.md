@@ -11,7 +11,12 @@ python evals/run_evals.py --repeats 3            # full run, 3 attempts per task
 python evals/run_evals.py --difficulty hard
 python evals/run_evals.py --task parser --repeats 5
 python evals/run_evals.py --retry-errors evals/results/<file>.json   # rerun only API errors
+python evals/run_evals.py --mode multi            # the four-agent team (see docs/ARCHITECTURE.md)
 ```
+
+`--mode single` (the default) runs one agent; `--mode multi` runs the Planner, Coder, Tester,
+and Reviewer team. Results record the mode, and multi-mode rows also record the number of
+rounds and the tokens used by each role. Compare the two modes on the same model.
 
 Results are printed per difficulty and saved to `evals/results/<timestamp>.json` after every
 run, so an interrupted eval loses nothing. Failing runs list the names of the tests that failed.

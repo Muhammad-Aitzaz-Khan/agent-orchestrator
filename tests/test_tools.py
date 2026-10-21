@@ -138,3 +138,47 @@ def test_invalid_json_arguments(project):
 
 def test_unknown_tool(project):
     assert "unknown tool" in execute_tool("delete_everything", "{}", project)
+
+def test_same_size_edit_is_picked_up_immediately(tmp_path):
+    """Regression test: a stale .pyc must never make run_tests check old code."""
+    repo = make_repo(tmp_path, "def double(x):\n    return x + 2\n", DOUBLE_TEST)
+    for _ in range(5):  # fail, fix with a same-size edit, re-test; repeat quickly
+        (repo / "mathlib.py").write_text("def double(x):\n    return x + 2\n")
+        assert execute_tool("run_tests", "{}", repo).startswith("Tests FAILED")
+        (repo / "mathlib.py").write_text("def double(x):\n    return x * 2\n")
+        assert execute_tool("run_tests", "{}", repo).startswith("Tests PASSED")
+
+
+def test_run_python_cannot_change_the_project(tmp_path):
+    (tmp_path / "data.txt").write_text("original")
+    ctx = tools.ToolContext(root=tmp_path, allowed=frozenset({"run_python"}))
+    code = '{"code": "open(\'data.txt\', \'w\').write(\'changed\'); print(open(\'data.txt\').read())"}'
+    out = execute_tool("run_python", code, tmp_path, ctx)
+    assert out == "exit code 0\nchanged"  # the script saw its own change...
+    assert (tmp_path / "data.txt").read_text() == "original"  # ...but only in the copy
+
+
+def test_run_python_cannot_see_env_file(tmp_path):
+    (tmp_path / ".env").write_text("GROQ_API_KEY=secret")
+    ctx = tools.ToolContext(root=tmp_path, allowed=frozenset({"run_python"}))
+    out = execute_tool("run_python", '{"code": "import os; print(os.path.exists(\'.env\'))"}',
+                       tmp_path, ctx)
+    assert out.endswith("False")
+
+
+def test_show_diff_against_baseline(tmp_path):
+    baseline, root = tmp_path / "before", tmp_path / "after"
+    for folder in (baseline, root):
+        folder.mkdir()
+        (folder / "a.py").write_text("x = 1\n")
+    (root / "a.py").write_text("x = 2\n")
+    ctx = tools.ToolContext(root=root, allowed=frozenset({"show_diff"}), baseline=baseline)
+    out = execute_tool("show_diff", "{}", root, ctx)
+    assert "-x = 1" in out and "+x = 2" in out
+
+
+def test_tools_outside_the_allowed_set_are_refused(project):
+    ctx = tools.ToolContext(root=project, allowed=frozenset({"read_file"}))
+    out = execute_tool("write_file", '{"path": "new.py", "content": "x"}', project, ctx)
+    assert "not available to this agent" in out
+    assert not (project / "new.py").exists()

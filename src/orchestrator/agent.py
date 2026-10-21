@@ -1,4 +1,5 @@
 """The core agent loop."""
+import json
 import os
 import time
 import uuid
@@ -16,10 +17,12 @@ from openai import (
     OpenAIError,
     RateLimitError,
 )
+from pydantic import ValidationError
 
 from orchestrator.context import compact, conversation_size
+from orchestrator.roles import Role, submit_schema
 from orchestrator.state import RunResult, Step, ToolCall
-from orchestrator.tools import TOOL_SCHEMAS, execute_tool
+from orchestrator.tools import DEFAULT_TOOLS, ToolContext, execute_tool, schemas_for
 from orchestrator.tracing import Tracer
 
 SYSTEM_PROMPT = (
@@ -40,6 +43,7 @@ DEFAULT_MAX_CONTEXT_CHARS = 20_000  # about 5,000 tokens; Groq's free tier caps 
 MAX_RATE_LIMIT_WAITS = 5  # retries per model call for short (per-minute) limits
 MAX_WAIT_S = 90  # never sleep longer than this for one retry
 MAX_BAD_TOOL_CALL_RETRIES = 2  # retries when the model produces a malformed tool call
+MAX_SUBMIT_NUDGES = 2  # reminders to a role that stops without calling its submit tool
 MAX_UNAVAILABLE_RETRIES = 4  # retries when the provider is overloaded or unreachable (503, network)
 
 
@@ -141,6 +145,23 @@ def call_model(
 
 # ---------- the loop ----------
 
+def _accept_submission(role: Role, raw_args: str | None, result: RunResult) -> str:
+    """Validate a role's submission. Invalid ones go back to the model as an error to fix."""
+    try:
+        data = json.loads(raw_args or "{}")
+        submission = role.output_model.model_validate(data)
+    except json.JSONDecodeError:
+        return "Error: submission arguments were not valid JSON. Submit again."
+    except ValidationError as e:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc']) or 'submission'}: {err['msg']}"
+            for err in e.errors()[:5]
+        )
+        return f"Error: invalid submission ({problems}). Fix it and submit again."
+    result.output = submission.model_dump()
+    return "Submitted."
+
+
 def run_agent(
     task: str,
     root: Path | None = None,
@@ -151,23 +172,42 @@ def run_agent(
     system_prompt: str = SYSTEM_PROMPT,
     sleep: Callable[[float], None] = time.sleep,
     context_chars: int | None = None,
+    role: Role | None = None,
+    baseline: Path | None = None,
 ) -> RunResult:
-    """Run one agent on a task and return everything that happened."""
+    """Run one agent on a task and return everything that happened.
+
+    Without a role this is the original single agent. With a role, the agent uses the role's
+    prompt and tools, and finishes by calling the role's submit tool; the validated submission
+    is returned in result.output.
+    """
     root = (root or Path.cwd()).resolve()
     client = client or make_client()
     model = model or default_model()
     context_chars = context_chars or max_context_chars()
 
+    tool_names = list(role.tools) if role else list(DEFAULT_TOOLS)
+    schemas = schemas_for(tool_names) + ([submit_schema(role)] if role else [])
+    tool_context = ToolContext(root=root, allowed=frozenset(tool_names), baseline=baseline)
+    if role:
+        system_prompt = role.system_prompt
+
     run_id = new_run_id()
     tracer = Tracer(run_id)
-    result = RunResult(run_id=run_id, task=task, status="max_steps")
+    result = RunResult(
+        run_id=run_id, task=task, status="max_steps", role=role.name if role else None
+    )
     started = time.perf_counter()
-    tracer.log("run_start", task=task, model=model, root=str(root), max_steps=max_steps)
+    tracer.log(
+        "run_start", task=task, model=model, root=str(root), max_steps=max_steps,
+        role=role.name if role else None, tools=tool_names,
+    )
 
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": task},
     ]
+    nudges = 0
 
     try:
         for number in range(1, max_steps + 1):
@@ -175,7 +215,7 @@ def run_agent(
             sent_chars = conversation_size(to_send)
             t0 = time.perf_counter()
             response = call_model(
-                client, tracer, sleep, model=model, messages=to_send, tools=TOOL_SCHEMAS
+                client, tracer, sleep, model=model, messages=to_send, tools=schemas
             )
             latency_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -196,7 +236,12 @@ def run_agent(
             )
 
             for call in tool_calls:
-                output = execute_tool(call.function.name, call.function.arguments, root)
+                if role and call.function.name == role.submit_tool:
+                    output = _accept_submission(role, call.function.arguments, result)
+                else:
+                    output = execute_tool(
+                        call.function.name, call.function.arguments, root, tool_context
+                    )
                 step.tool_calls.append(
                     ToolCall(name=call.function.name, arguments=call.function.arguments, output=output)
                 )
@@ -214,7 +259,21 @@ def run_agent(
             if on_step:
                 on_step(step)
 
+            if result.output is not None:
+                result.status = "completed"
+                result.final_answer = message.content
+                tracer.log("submitted", step=number, role=role.name, output=result.output)
+                break
+
             if not tool_calls:
+                if role and nudges < MAX_SUBMIT_NUDGES:
+                    nudges += 1
+                    messages.append({
+                        "role": "user",
+                        "content": f"You have not submitted your result yet. "
+                        f"Call {role.submit_tool} now.",
+                    })
+                    continue
                 result.status = "completed"
                 result.final_answer = message.content
                 break

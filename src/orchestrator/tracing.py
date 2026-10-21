@@ -1,6 +1,6 @@
 """Records every event in a run to a JSONL file for debugging and analysis."""
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -10,6 +10,6 @@ class Tracer:
         self.path = runs_dir / f"{run_id}.jsonl"
 
     def log(self, event: str, **data) -> None:
-        record = {"time": datetime.now(timezone.utc).isoformat(), "event": event, **data}
+        record = {"time": datetime.now(UTC).isoformat(), "event": event, **data}
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, default=str) + "\n")
