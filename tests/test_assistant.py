@@ -234,7 +234,8 @@ def test_due_routines_become_jobs_and_move_on(store, user, monkeypatch):
     assert worker.start_due_routines(store) == []  # nothing is due twice
 
 
-def test_tokens_are_encrypted_at_rest():
+def test_tokens_are_encrypted_at_rest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the local key file is created here, not in the project
     secret = crypto.encrypt({"refresh_token": "abc"})
     assert "abc" not in secret and crypto.decrypt(secret) == {"refresh_token": "abc"}
     assert crypto.decrypt("garbage") is None
