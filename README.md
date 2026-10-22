@@ -122,9 +122,9 @@ Locally, Relay signs you in automatically and keeps its data in `relay.db`. Gmai
 need Google credentials (see the guide below). Recorded jobs can be watched at `/demo`.
 
 To put it online for free, for you and the people you invite, with routines that run while your
-computer is off: make three free accounts (Hugging Face, Groq, Neon), then run
-`python deploy\deploy.py`. It creates the Space, stores the secrets, makes an invite code for
-each person, and sets up a GitHub Actions job that keeps the site awake. Details:
+computer is off: make three free accounts (Render, Groq, Neon), then run
+`python deploy\deploy.py`. It creates the Render service from this repository, stores the
+secrets, makes an invite code for each person, and keeps the site awake for scheduled routines. Details:
 [docs/DEPLOY.md](docs/DEPLOY.md).
 
 Other entry points:
@@ -146,7 +146,7 @@ src/orchestrator/
     guard/            the audit-hook sandbox used on servers without Docker
     web/              the app (one page), the office, sign-in and API, recordings
 evals/                benchmark tasks, harness, re-scoring, results
-deploy/               one-command deployment to Hugging Face Spaces
+deploy/               one-command deployment to Render
 docs/                 architecture, research, deployment
 tests/                tests for every part, none of which call a real API
 ```

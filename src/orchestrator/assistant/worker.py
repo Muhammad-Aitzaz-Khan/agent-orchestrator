@@ -6,8 +6,12 @@ not once for every missed time.
 """
 import datetime as dt
 import logging
+import os
 import threading
+import time
 from collections.abc import Callable
+
+import httpx
 
 from orchestrator.assistant import push
 from orchestrator.assistant import schedule as sched
@@ -16,6 +20,7 @@ from orchestrator.assistant.store import Store, now
 
 log = logging.getLogger(__name__)
 POLL_S = 5
+KEEP_AWAKE_S = 600
 
 
 def start_due_routines(store: Store, at: dt.datetime | None = None) -> list[dict]:
@@ -53,6 +58,7 @@ class Worker:
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
         self._client = None
+        self._last_ping = -KEEP_AWAKE_S
 
     def client(self):
         if self._client is None and self.client_factory is not None:
@@ -79,9 +85,23 @@ class Worker:
             return None
         return run_job(self.store, job, client=self.client(), models=self.models, live=self.live)
 
+    def keep_awake(self) -> None:
+        """Free hosts (Render) put a service to sleep after 15 minutes without visits, which
+        would stop scheduled routines. With KEEP_AWAKE_URL set, the server visits itself every
+        10 minutes through its public address, which counts as a visit."""
+        url = os.getenv("KEEP_AWAKE_URL", "").rstrip("/")
+        if not url or time.monotonic() - self._last_ping < KEEP_AWAKE_S:
+            return
+        self._last_ping = time.monotonic()
+        try:
+            httpx.get(f"{url}/healthz", timeout=30)
+        except httpx.HTTPError as e:
+            log.warning("keep-awake ping failed: %s", e)
+
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
+                self.keep_awake()
                 if self.run_once() is not None:
                     continue  # there may be more work waiting
             except Exception:

@@ -194,7 +194,7 @@ emphasis as well as the structured data. The Reviewer's approval note becomes th
 the developer playground (`/api/runs`), which runs the team on any request or on a sample
 project to fix.
 
-**Public mode** (`RELAY_PUBLIC=1`, used by `deploy/huggingface`, set up with `docs/DEPLOY.md`):
+**Public mode** (`RELAY_PUBLIC=1`, used by `deploy/render/Dockerfile`, set up with `docs/DEPLOY.md`):
 
 - People sign in with an invite code (`INVITES`, one per email, made by `deploy/deploy.py`;
   wrong codes are throttled per address) or with Google for emails in `ALLOWED_EMAILS`.
@@ -207,6 +207,8 @@ project to fix.
   writing outside the job's folder and the temp folder. The child also gets a zero process
   limit (so even a direct `fork_exec` fails), and memory, file-size, and CPU limits.
 - The playground is switched off; job folders and agent traces are deleted when a job ends.
+- With `KEEP_AWAKE_URL` set, the worker visits the site's own public address every 10 minutes,
+  because free hosts put a service to sleep after a period without visits.
 
 ## Measuring what each part adds
 

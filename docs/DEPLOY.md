@@ -6,45 +6,49 @@ service here is free and none needs a card.
 
 | Piece | Service | Why |
 |---|---|---|
-| The app | Hugging Face Spaces (Docker, free CPU) | Runs the server and the robots |
-| Data | Neon (free Postgres) | A Space's own disk is wiped on restart |
+| The app | Render (free web service) | Runs the server and the robots |
+| Data | Neon (free Postgres) | Render's own disk is wiped on every deploy |
 | AI | Groq, from an account with **no card added** | A free account can never be charged |
-| Staying awake | GitHub Actions, in this repository | Free Spaces pause after 48 hours without visits |
+
+(Hugging Face Spaces was the first choice, but since 2026 Docker Spaces need a paid PRO plan.)
 
 ## Three accounts, three values
 
-Sign up for each (all three accept "Continue with Google" or GitHub), then copy one value
-from each. You never need to paste these anywhere except your own `deploy/keys.env`.
-
-1. **Hugging Face** (huggingface.co): Settings > Access Tokens > **Create new token**, type
-   **Write**. Copy the token (starts with `hf_`).
+1. **Render** (render.com): sign up **with GitHub**, and when GitHub asks which repositories
+   Render may see, allow `agent-orchestrator`. Then **Account Settings > API Keys > Create API
+   Key**. Copy it (starts with `rnd_`).
 2. **Groq** (console.groq.com), a **new account with no payment method**: API Keys >
    **Create API Key**. Copy the key (starts with `gsk_`).
-3. **Neon** (neon.tech): create a project (pick the region closest to you), then **Connect**
-   and copy the connection string (starts with `postgresql://`).
+3. **Neon** (neon.tech): create a project (pick the region closest to you), open it, click
+   **Connect** at the top of the project page, and copy the connection string (starts with
+   `postgresql://`; click "Show password" first if it shows `****`).
 
 ## One command
 
-In VS Code's terminal, in the project folder:
+Push your latest commits first (VS Code: **Source Control > Sync Changes**), because Render builds
+from GitHub. Then, in VS Code's terminal, in the project folder:
 
 ```powershell
 python deploy\deploy.py
 ```
 
-The first time, it creates `deploy\keys.env`. Open it, paste the three values, put your email
-(and any friends' emails) on the `EMAILS=` line, save, and run the same command again. It:
+The first time, it creates `deploy\keys.env`. Paste the three values, put your email (and any
+friends' emails) on the `EMAILS=` line, save, and run the same command again. It:
 
 - creates the site's private keys and **an invite code for each email**
-- builds the app and creates your Space at `https://<your-username>-relay.hf.space`
-- stores every secret in the Space's settings, never in the code
-- writes `.github/workflows/keep-awake.yml`, which visits the site every 6 hours
+- creates your free Render service from your GitHub repository (`deploy/render/Dockerfile`)
+- stores every secret in the service's settings, never in the code
+- turns on a keep-awake ping: Render's free plan sleeps after 15 minutes without visits, so
+  the server visits itself every 10 minutes, and `.github/workflows/keep-awake.yml` wakes it
+  every 2 hours as a backup
 
-It prints your site's address and the invite codes. Hugging Face takes 3 to 5 minutes to build
-it the first time. Then **push to GitHub** (VS Code Sync) so the keep-awake workflow starts.
+It prints your site's address (`https://relay.onrender.com` or similar) and the invite codes.
+The first build takes 5 to 8 minutes; the script also prints a link where you can watch it.
+Push once more afterwards so the backup workflow is on GitHub.
 
 `deploy\keys.env` and `deploy\generated.env` stay on your computer (they are in `.gitignore`).
-Keep `generated.env`: running `deploy.py` again publishes a new version with the same keys,
-so nobody is signed out.
+Keep `generated.env`: running `deploy.py` again reuses the same keys, so nobody is signed out.
+After you push new code, Render rebuilds automatically.
 
 ## Inviting people
 
@@ -56,8 +60,7 @@ Send each person the site's address and their invite code from the output.
 Open the site in Chrome (Android) or Safari (iPhone), sign in, then add it to the home screen
 (Safari: **Share > Add to Home Screen**). Open it from the home screen and choose
 **Settings > Notifications > Turn on**. On iPhone, notifications only work from the home-screen
-app (iOS 16.4 or later). Open the `hf.space` address directly, not the huggingface.co/spaces
-page, which shows the site inside a frame where notifications are blocked.
+app (iOS 16.4 or later). 
 
 ## Gmail and Calendar (optional)
 
@@ -75,7 +78,8 @@ In console.cloud.google.com:
    - Data access: add `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`,
      `.../auth/gmail.readonly`, and `.../auth/calendar.readonly`.
 4. **Clients**: create an OAuth client of type **Web application**. Under **Authorised redirect
-   URIs** add `https://<your-username>-relay.hf.space/auth/callback`. Copy the client ID and
+   URIs** add your site's address followed by `/auth/callback`, for example
+   `https://relay.onrender.com/auth/callback`. Copy the client ID and
    secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `deploy\keys.env`, and run
    `python deploy\deploy.py` again.
 
@@ -90,8 +94,10 @@ paid security review, which a personal assistant doesn't need.
   jobs. Relay stops at `ASSISTANT_DAILY_TOKENS` (default 180,000) for the site and
   `ASSISTANT_USER_DAILY_TOKENS` (default 90,000) per person, and a skipped routine says so. The
   Concierge uses the smaller `gpt-oss-20b`, which has its own quota. To fit more in, give other
-  robots the smaller model too with the Space variables `LLM_MODEL_PLANNER`,
-  `LLM_MODEL_TESTER`, and `LLM_MODEL_REVIEWER`.
+  robots the smaller model too with the environment variables `LLM_MODEL_PLANNER`,
+  `LLM_MODEL_TESTER`, and `LLM_MODEL_REVIEWER` (Render: your service > Environment).
+- Render's free plan has 512 MB of memory and a small share of a CPU: plenty for one person and
+  a few friends, and jobs take a little longer to start than on your own computer.
 - One job runs at a time; others wait their turn.
 - Model-written code runs in the guarded sandbox (`src/orchestrator/guard`), which blocks
   network access, other programs, and the app's own files, and none of the site's secrets are

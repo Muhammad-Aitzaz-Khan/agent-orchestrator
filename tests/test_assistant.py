@@ -387,3 +387,13 @@ def test_invite_codes_sign_people_in(store, monkeypatch):
     for _ in range(8):
         client.post("/auth/invite", json={"email": "x@example.com", "code": "guess-guess"}, headers=HDR)
     assert client.post("/auth/invite", json={"email": "x@example.com", "code": "guess"}, headers=HDR).status_code == 429
+
+
+def test_the_server_keeps_itself_awake(store, monkeypatch):
+    pings = []
+    monkeypatch.setenv("KEEP_AWAKE_URL", "https://relay.example/")
+    monkeypatch.setattr(worker.httpx, "get", lambda url, timeout: pings.append(url))
+    w = worker.Worker(store)
+    w.keep_awake()
+    w.keep_awake()  # not again within 10 minutes
+    assert pings == ["https://relay.example/healthz"]
