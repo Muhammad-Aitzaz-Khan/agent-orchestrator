@@ -51,3 +51,19 @@ def test_render_calls(monkeypatch):
     body = calls[-1][2]
     assert body["serviceDetails"]["plan"] == "free" and body["serviceDetails"]["runtime"] == "docker"
     assert body["envVars"] == [{"key": "A", "value": "1"}]
+
+
+def test_unreachable_repository_explains_the_fix(monkeypatch):
+    import io
+    import urllib.error
+
+    import pytest
+
+    body = b'{"message":"passed in repository URL is invalid or unfetchable: https://github.com/me/repo"}'
+
+    def refuse(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))
+
+    monkeypatch.setattr(deploy.urllib.request, "urlopen", refuse)
+    with pytest.raises(deploy.DeployError, match="github.com/settings/installations"):
+        deploy.Render("rnd_x").call("POST", "/services", {})

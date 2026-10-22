@@ -163,6 +163,11 @@ class Render:
             detail = e.read().decode(errors="replace")[:500]
             if e.code == 401:
                 raise DeployError("Render did not accept RENDER_API_KEY. Create a new one and paste it again.") from e
+            if e.code in (400, 404) and "repository" in detail.lower():
+                raise DeployError(
+                    "Render can't see your GitHub repository yet. Give it access: open "
+                    "https://github.com/settings/installations, click Configure next to Render, "
+                    "under Repository access add agent-orchestrator, click Save, then run this again.") from e
             raise DeployError(f"Render answered {e.code} to {method} {path}: {detail}") from e
 
     def owner_id(self) -> str:
