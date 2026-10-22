@@ -16,13 +16,20 @@ dependencies = [
 web = [
     "fastapi",
     "uvicorn",
+    "httpx",
+    "itsdangerous",
+    "python-multipart",
+    "sqlalchemy>=2",
+    "psycopg[binary]",
+    "cryptography",
+    "pywebpush",
+    "pypdf",
+    "python-docx",
 ]
 dev = [
+    "agent-orchestrator[web]",
     "pytest",
     "ruff",
-    "httpx",
-    "fastapi",
-    "uvicorn",
 ]
 
 [build-system]
@@ -34,7 +41,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "orchestrator" = ["guard/*.py"]
-"orchestrator.web" = ["static/*", "replays/*.jsonl"]
+"orchestrator.web" = ["static/*", "static/vendor/*", "static/icons/*", "replays/*.jsonl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -204,6 +204,11 @@ details.table-view summary { cursor: pointer; color: var(--muted); font-size: 0.
 .copy { cursor: pointer; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; font-size: 0.8rem; }
 .steps h3 { margin: 0 0 6px; font-size: 1rem; }
 footer { border-top: 1px solid var(--line); padding-block: 24px 40px; color: var(--dim); font-size: 0.88rem; }
+/* Embedded in the assistant ("Show agents working"): only the office, the player, and the panels */
+body.embed .topbar, body.embed .intro, body.embed section.band, body.embed footer, body.embed .outcome { display: none !important; }
+body.embed .wrap { max-width: none; padding-left: 0; padding-right: 0; }
+body.embed .stage { max-height: none; }
+body.embed .panels { padding-bottom: 4px; }
 
 @media (max-width: 900px) {
   .panels, .outcome, .results-grid { grid-template-columns: minmax(0, 1fr); }
@@ -372,6 +377,7 @@ python -m orchestrator.doctor</code><button class="copy">Copy</button></div><p c
 <script>
 window.RELAY_RECORDINGS = /*RECORDINGS*/[];
 window.RELAY_LIVE = /*LIVE*/false;
+window.RELAY_EMBED = /*EMBED*/false;
 </script>
 <script>
 "use strict";
@@ -1045,21 +1051,22 @@ window.RELAY_LIVE = /*LIVE*/false;
   }
   function selectJob(btn) { for (const b of $("picker").children) b.setAttribute("aria-pressed", String(b === btn)); }
 
+  function appendLive(rec, e) {
+    e.time = e.time || Date.now() / 1000;
+    rec.events.push(e);
+    // new events are scheduled at the end so playback follows the job as it happens
+    const prev = player.schedule.at(-1);
+    player.schedule.push(prev == null ? 0 : Math.max(prev + 0.45, player.t));
+    player.duration = player.schedule.at(-1) + 1;
+    if (e.type === "run_finished") { player.live = false; $("live-badge").hidden = true; }
+    paintTrack();
+  }
+
   function startLive(id, task, kind) {
     const rec = { title: "Your job", task, kind, live: true, events: [] };
     load(rec);
     const src = new EventSource(`/api/runs/${id}/events`);
-    src.onmessage = (msg) => {
-      const e = JSON.parse(msg.data);
-      e.time = e.time || Date.now() / 1000;
-      rec.events.push(e);
-      // new events are scheduled at the end so playback follows the job as it happens
-      const prev = player.schedule.at(-1);
-      player.schedule.push(prev == null ? 0 : Math.max(prev + 0.45, player.t));
-      player.duration = player.schedule.at(-1) + 1;
-      if (e.type === "run_finished") { player.live = false; $("live-badge").hidden = true; }
-      paintTrack();
-    };
+    src.onmessage = (msg) => appendLive(rec, JSON.parse(msg.data));
     src.addEventListener("end", () => src.close());
     src.onerror = () => { if (player.live) askNote("Lost the connection to the server. Refresh the page to try again.", "note error"); src.close(); };
   }
@@ -1119,10 +1126,22 @@ window.RELAY_LIVE = /*LIVE*/false;
   renderScreenTabs();
   renderCrew();
   renderChart();
-  const recs = (window.RELAY_RECORDINGS || []).filter((r) => r.events && r.events.length);
-  renderPicker(recs);
-  setUpLive();
-  if (recs.length) { selectJob($("picker").children[0]); load(recs[0], { autoplay: !reduceMotion }); }
+  if (window.RELAY_EMBED) {
+    // Driven by the assistant page that contains this one: it posts a job's events here.
+    document.body.classList.add("embed");
+    let current = null;
+    addEventListener("message", (msg) => {
+      if (msg.origin !== location.origin || !msg.data) return;
+      if (msg.data.type === "load") { current = msg.data.recording; current.events = current.events || []; load(current, { autoplay: !reduceMotion }); }
+      if (msg.data.type === "event" && current) appendLive(current, msg.data.event);
+    });
+    new ResizeObserver(() => parent.postMessage({ type: "office-height", height: document.documentElement.scrollHeight }, location.origin)).observe(document.body);
+  } else {
+    const recs = (window.RELAY_RECORDINGS || []).filter((r) => r.events && r.events.length);
+    renderPicker(recs);
+    setUpLive();
+    if (recs.length) { selectJob($("picker").children[0]); load(recs[0], { autoplay: !reduceMotion }); }
+  }
   updatePlayButton();
   addEventListener("resize", () => render());
   requestAnimationFrame(frame);

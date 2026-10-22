@@ -1,6 +1,5 @@
-# Relay as a public demo on Hugging Face Spaces (Docker Space).
-# Visitors never enter a key: set GROQ_API_KEY as a Space secret, ideally from a Groq account
-# with no payment method, so the site can never cost money.
+# Relay on Hugging Face Spaces (Docker Space). Secrets and setup: docs/DEPLOY.md.
+# Use a GROQ_API_KEY from a Groq account with no payment method, so the site can never cost money.
 FROM python:3.12-slim
 
 RUN useradd -m -u 1000 user

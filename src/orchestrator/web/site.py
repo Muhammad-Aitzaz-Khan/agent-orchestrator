@@ -61,16 +61,18 @@ def _script_json(value) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False).replace("<", "\\u003c")
 
 
-def render_fragment(live: bool = False, recordings: list[dict] | None = None) -> str:
+def render_fragment(live: bool = False, recordings: list[dict] | None = None,
+                    embed: bool = False) -> str:
     page = PAGE.read_text(encoding="utf-8")
     recs = load_recordings() if recordings is None else recordings
     page = page.replace("/*RECORDINGS*/[]", _script_json(recs), 1)
+    page = page.replace("/*EMBED*/false", "true" if embed else "false", 1)
     return page.replace("/*LIVE*/false", "true" if live else "false", 1)
 
 
-def render_page(live: bool = False, recordings: list[dict] | None = None) -> str:
+def render_page(live: bool = False, recordings: list[dict] | None = None, embed: bool = False) -> str:
     """The full HTML document: the fragment's head part goes into <head>, the rest into <body>."""
-    fragment = render_fragment(live, recordings)
+    fragment = render_fragment(live, recordings, embed)
     split = fragment.index("<header")
     head, body = fragment[:split], fragment[split:]
     return (

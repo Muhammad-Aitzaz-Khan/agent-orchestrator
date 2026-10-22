@@ -194,6 +194,7 @@ def run_agent(
     context_chars: int | None = None,
     role: Role | None = None,
     baseline: Path | None = None,
+    runs_dir: Path = Path("runs"),
 ) -> RunResult:
     """Run one agent on a task and return everything that happened.
 
@@ -213,7 +214,7 @@ def run_agent(
         system_prompt = role.system_prompt
 
     run_id = new_run_id()
-    tracer = Tracer(run_id)
+    tracer = Tracer(run_id, runs_dir)
     result = RunResult(
         run_id=run_id, task=task, status="max_steps", role=role.name if role else None
     )

@@ -108,37 +108,94 @@ Groq, where each model has its own daily limit, this also spreads usage across q
 a trace of phase transitions and a `runs/<id>.state.json` snapshot of the whole state (plan,
 rounds, decisions, tokens per role) after every phase.
 
-## The web app (Relay)
+## The personal assistant
 
-`python -m orchestrator.web` serves one page (`web/static/relay.html`): a box to ask the team
-for anything (create mode) or to fix a sample project, and an office scene where the four
-robots sit at desks. The robot holding the job's folder has its lamp on, its mini screen shows
-its latest tool call (the file it opened, the code it saved, the test output), and the wall
-board shows the checklist turning green as the Checker reports. Below the office: the active
-robot's screen enlarged, the team chat, the checklist with evidence, and the result.
+Relay's main use is a personal assistant built on the same team (`src/orchestrator/assistant`).
+The design follows patterns from published assistant systems (see `docs/RESEARCH.md`).
 
+```
+request ──> Concierge ──> proposal ──(person confirms)──> job now, or routine on a schedule
+                                                               │
+scheduler (worker.py) ── due routine ──> job queue ── one at a time ──> runner.py
+                                                               │
+         gather.py: news (Google News RSS), Gmail, Calendar, weather (Open-Meteo),
+                    uploaded files, web pages  ──> inputs/*.md
+                                                               │
+         team in "assist" mode: Planner ─> Builder ─> Checker ─> Reviewer
+                                                               │
+         result + summary + recording ──> Inbox, and a Web Push notification
+```
+
+**The Concierge** (`concierge.py`) is a fifth role on the same agent loop, with no tools and a
+`submit_proposal` tool. It picks one skill from the catalogue (`skills.py`), writes a
+self-contained instruction, and turns phrases like "every weekday morning" into a schedule
+(`schedule.py`: a time and weekdays, every N hours, or once, in the person's time zone). Its
+proposal is validated in code (unknown skills, impossible times, a page watcher without an
+address are rejected) and shown to the person; nothing is stored until they confirm.
+
+**Gather, then reason.** Before the team starts, ordinary code collects the material the skill
+needs and writes it to `inputs/`, which the tool layer makes read-only. The agents keep their
+file tools only. This keeps credentials and network access away from the model, and means an
+instruction hidden in an email or a page has nothing to act with. The assist-mode prompts
+also tell every role to treat `inputs/` as data, and the Checker fails any fact it cannot find
+there. Watchers (`web_watch`, `weather_alert`) compare with the routine's saved state and stay
+quiet when nothing changed, without calling the model.
+
+**The worker** (`worker.py`) polls for due routines, moves each to its next time before
+queueing it (so a server that slept runs a missed routine once, not once per missed slot),
+delivers reminders directly, and runs queued jobs one at a time. Jobs interrupted by a restart
+are queued again.
+
+**Allowances.** Each job has a token budget; `ASSISTANT_DAILY_TOKENS` and
+`ASSISTANT_USER_DAILY_TOKENS` cap a day's use, and a provider's daily-limit error skips the job
+with a plain message rather than failing it.
+
+**Storage** (`store.py`) is SQLAlchemy Core over SQLite locally or Postgres in the cloud:
+people, encrypted Google tokens, routines, jobs (result files, summary, and the event
+recording), uploads, push subscriptions, and daily usage. Every query is scoped to the
+signed-in person.
+
+**Google** (`google.py`): sign-in asks only for name and email; Gmail and Calendar are
+separate, read-only, optional connections. Refresh tokens are stored encrypted with a key
+derived from `RELAY_SECRET_KEY`. When Google ends a connection (weekly, for apps in Testing),
+the connection is marked expired and the app offers a one-tap reconnect.
+
+**Notifications** (`push.py`): Web Push with VAPID keys; the service worker (`static/sw.js`)
+shows the notification and opens the job when tapped. Subscriptions a browser has dropped are
+deleted on the next send.
+
+## The web app
+
+`python -m orchestrator.web` serves the assistant (`web/static/app.html`, one page with no
+build step): Today (the Concierge's front desk, what's coming up, setup steps), Inbox,
+Routines, Files, and Settings, with a bottom tab bar on phones. It is installable (manifest,
+icons, service worker) so notifications reach phones. The sign-in and API routes are in
+`web/assistant_api.py`; every request that changes something must carry the header
+`X-Relay: 1`, which other sites cannot send, on top of SameSite session cookies.
+
+**The office** (`web/static/relay.html`) shows the robots at their desks. The robot holding the
+job's folder has its lamp on, its mini screen shows its latest tool call (the file it opened,
+the text it saved, a check's output), and the wall board turns green as the Checker reports.
 The orchestrator emits structured events (`run_started`, `agent_started`, `agent_step`,
-`agent_submitted`, `agent_finished`, `gate`, `decision`, `run_finished`) through `on_update`,
-and the server streams them with Server-Sent Events. The page turns them into a model and
-plays it back, so a live job and a recording use the same code.
+`agent_submitted`, `agent_finished`, `gate`, `decision`, `run_finished`) through `on_update`;
+the page turns them into a model and plays it back, so a live job and a recording use the same
+code. The same file serves three ways (`web/site.py`): at `/demo` with the bundled recordings,
+at `/office` as an embed that the Inbox posts a job's events into ("Show agents working",
+live while the job runs), and as a single static file.
 
 **Notes between robots.** Every submission has a `message` field: a short note, in plain
 English, to the robot that works next. It is shown in the team chat and is also added to that
 robot's instructions ("Note from the Planner: ..."), so the hand-off carries the sender's
-emphasis as well as the structured data.
+emphasis as well as the structured data. The Reviewer's approval note becomes the notification.
 
-`web/site.py` builds the page with the recordings embedded: served by the app with live jobs
-switched on, or written out as a single static file that only plays recordings.
-`web/replays/` holds recordings rebuilt from real eval traces by `web/record.py`, with paths
-that reveal a user's name removed.
+**Local mode** (the default) listens on 127.0.0.1 and signs you in automatically. It also keeps
+the developer playground (`/api/runs`), which runs the team on any request or on a sample
+project to fix.
 
-**Local mode** listens on 127.0.0.1, allows one live job at a time, limits request length, and
-saves each job's events so it can become a recording.
+**Public mode** (`RELAY_PUBLIC=1`, used by `deploy/huggingface`, set up with `docs/DEPLOY.md`):
 
-**Public mode** (`RELAY_PUBLIC=1`, used by `deploy/huggingface`) is for a site anyone can use
-without a key:
-
-- The key is read once into the provider client and removed from the environment; the
+- People sign in with Google, and only addresses in `ALLOWED_EMAILS` are let in.
+- The AI key is read once into the provider client and removed from the environment; the
   process is made non-dumpable so other processes of the same user cannot read
   `/proc/<pid>/environ`.
 - `SANDBOX=guarded`: every Python process the agents start loads `guard/sitecustomize.py`,
@@ -146,11 +203,7 @@ without a key:
   access, starting programs, ctypes, reading `/proc`, `/sys`, and the app's folder, and
   writing outside the job's folder and the temp folder. The child also gets a zero process
   limit (so even a direct `fork_exec` fails), and memory, file-size, and CPU limits.
-- `RELAY_DAILY_TOKENS` (default 180,000) for the whole site and `RELAY_JOBS_PER_VISITOR`
-  (default 3) per day, and a 60,000-token budget per job. When the provider reports its daily
-  limit, the site closes for the day.
-- Jobs run in a temporary folder that is deleted when the job ends; events are kept only in
-  memory.
+- The playground is switched off; job folders and agent traces are deleted when a job ends.
 
 ## Measuring what each part adds
 

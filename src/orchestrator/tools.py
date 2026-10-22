@@ -147,7 +147,8 @@ def _is_protected(rel: Path) -> bool:
     """Files the agent may read but never modify: tests and config."""
     name = rel.name
     return (
-        name in PROTECTED_FILES
+        (len(rel.parts) > 1 and rel.parts[0] == "inputs")  # source material gathered for the team
+        or name in PROTECTED_FILES
         or name.startswith("test_")
         or name.endswith("_test.py")
         or "tests" in rel.parts[:-1]

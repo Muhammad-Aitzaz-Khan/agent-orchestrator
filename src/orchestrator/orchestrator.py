@@ -183,6 +183,7 @@ def run_orchestrator(
         updates.send("agent_started", role=role.name, title=role.title)
         result = run_agent(
             message,
+            runs_dir=runs_dir,
             root=root,
             max_steps=role.max_steps,
             model=model_for(role, models),

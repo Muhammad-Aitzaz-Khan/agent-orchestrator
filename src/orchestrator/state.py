@@ -134,7 +134,7 @@ class Round(BaseModel):
 class OrchestratorResult(BaseModel):
     run_id: str
     task: str
-    kind: Literal["fix", "create"] = "fix"
+    kind: Literal["fix", "create", "assist"] = "fix"
     status: Literal["completed", "unresolved", "budget_exhausted", "error"] = "unresolved"
     plan: Plan | None = None
     plan_is_fallback: bool = False
