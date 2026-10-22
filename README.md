@@ -4,10 +4,10 @@ Tell Relay what you need: the news at 7 every morning, a summary of today's emai
 worked through while you're out. A **Concierge** agent turns the request into a job or a
 routine and shows you exactly what it understood. Then a team of four agents (Planner,
 Builder, Checker, Reviewer) does the work in the background, and you get a notification when
-it's ready. If you're curious, **Show agents working** opens a little night-shift office where
-you can watch each robot's screen.
+it's ready. The **Agents** page (or **Show agents working** on any result) opens the office,
+where you can watch each robot's screen, live.
 
-![Relay's Today page: the Concierge at the front desk has proposed a "Morning tech news" routine for weekdays at 7:00 AM](docs/images/assistant-today.png)
+![Relay's Today page: the ask box, and the crew of five robots showing that the Planner and Builder have handed over and the Checker is working on "Morning tech news"](docs/images/assistant-today.png)
 
 ## What you can hand over
 
@@ -22,12 +22,13 @@ you can watch each robot's screen.
 
 ## Watch the agents work
 
-Every finished job keeps a recording of how the team made it. Behind **Show agents working**
-is the office: the robot holding the job's folder has its lamp on, its mini screen shows what
-it is actually doing, the wall board turns green as the Checker verifies each item, and the
+The crew on Today lights up with what each robot is doing right now. The **Agents** page shows
+the office: the job running now (live), recent jobs (every job keeps a recording), or example
+recordings. The robot holding the job's folder has its lamp on, its mini screen shows what it
+is actually doing, the checklist display turns green as the Checker verifies each item, and the
 team chat shows the notes the robots leave each other, in their own words.
 
-![The office open inside a job: the Planner has written a four-item checklist and passed the folder to the Builder](docs/images/assistant-office.png)
+![The Agents page: "Morning tech news" live in the office, with the Builder saving output.md and the team chat below](docs/images/assistant-agents.png)
 
 ![A recorded run: four robots pass a bug-fixing job along](docs/images/office.gif)
 
@@ -35,7 +36,7 @@ team chat shows the notes the robots leave each other, in their own words.
 
 Relay installs to the home screen and sends notifications, so you don't need to keep it open.
 
-![Relay on a phone: Today, the Concierge's proposal, and a finished job with the office open](docs/images/assistant-phone.png)
+![Relay on a phone: the crew at work on Today, the Agents page live, and a finished job](docs/images/assistant-phone.png)
 
 ## How it works
 
@@ -76,7 +77,8 @@ including the UI books and patterns it applies: [docs/RESEARCH.md](docs/RESEARCH
 
 - Gmail and Calendar are **read-only**; Relay can't send, delete, or change anything.
 - Email is read when a job runs and **not stored**; Google tokens are **encrypted**.
-- Only people you list in `ALLOWED_EMAILS` (and add in Google) can sign in.
+- Only people you invite can sign in (an invite code each, or Google for listed emails), and
+  repeated wrong codes are blocked.
 - Model-written code runs in a **guarded sandbox** (Python audit hooks block network access,
   other programs, native libraries, and the app's files; a zero process limit stops forks), or
   in a Docker container with `SANDBOX=docker`.
@@ -120,8 +122,10 @@ Locally, Relay signs you in automatically and keeps its data in `relay.db`. Gmai
 need Google credentials (see the guide below). Recorded jobs can be watched at `/demo`.
 
 To put it online for free, for you and the people you invite, with routines that run while your
-computer is off: [docs/DEPLOY.md](docs/DEPLOY.md) (Hugging Face Spaces, Neon, Google Cloud,
-cron-job.org; no card needed anywhere).
+computer is off: make three free accounts (Hugging Face, Groq, Neon), then run
+`python deploy\deploy.py`. It creates the Space, stores the secrets, makes an invite code for
+each person, and sets up a GitHub Actions job that keeps the site awake. Details:
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 Other entry points:
 
@@ -142,7 +146,7 @@ src/orchestrator/
     guard/            the audit-hook sandbox used on servers without Docker
     web/              the app (one page), the office, sign-in and API, recordings
 evals/                benchmark tasks, harness, re-scoring, results
-deploy/               the Hugging Face Space build
+deploy/               one-command deployment to Hugging Face Spaces
 docs/                 architecture, research, deployment
 tests/                tests for every part, none of which call a real API
 ```

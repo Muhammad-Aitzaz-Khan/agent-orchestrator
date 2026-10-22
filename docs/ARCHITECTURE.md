@@ -167,13 +167,15 @@ deleted on the next send.
 ## The web app
 
 `python -m orchestrator.web` serves the assistant (`web/static/app.html`, one page with no
-build step): Today (the Concierge's front desk, what's coming up, setup steps), Inbox,
-Routines, Files, and Settings, with a bottom tab bar on phones. It is installable (manifest,
+build step): Today (the ask box, the crew of five robots lit by what each is doing right
+now, what's coming up, setup steps), Inbox, Agents (the office, live for the running job or
+replaying any past job or example recording), Routines, Files, and Settings, with a bottom tab bar on phones. It is installable (manifest,
 icons, service worker) so notifications reach phones. The sign-in and API routes are in
 `web/assistant_api.py`; every request that changes something must carry the header
 `X-Relay: 1`, which other sites cannot send, on top of SameSite session cookies.
 
-**The office** (`web/static/relay.html`) shows the robots at their desks. The robot holding the
+**The office** (`web/static/relay.html`) shows the robots at their workstations; the robots
+themselves are drawn by `web/static/unit.js`, shared by both pages. The robot holding the
 job's folder has its lamp on, its mini screen shows its latest tool call (the file it opened,
 the text it saved, a check's output), and the wall board turns green as the Checker reports.
 The orchestrator emits structured events (`run_started`, `agent_started`, `agent_step`,
@@ -194,7 +196,8 @@ project to fix.
 
 **Public mode** (`RELAY_PUBLIC=1`, used by `deploy/huggingface`, set up with `docs/DEPLOY.md`):
 
-- People sign in with Google, and only addresses in `ALLOWED_EMAILS` are let in.
+- People sign in with an invite code (`INVITES`, one per email, made by `deploy/deploy.py`;
+  wrong codes are throttled per address) or with Google for emails in `ALLOWED_EMAILS`.
 - The AI key is read once into the provider client and removed from the environment; the
   process is made non-dumpable so other processes of the same user cannot read
   `/proc/<pid>/environ`.

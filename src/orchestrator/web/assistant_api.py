@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import secrets
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -31,6 +32,36 @@ LOCAL_EMAIL = "you@this-computer"
 
 def allowed_emails() -> set[str]:
     return {e.strip().lower() for e in os.getenv("ALLOWED_EMAILS", "").split(",") if e.strip()}
+
+
+def invites() -> dict[str, str]:
+    """INVITES="you@gmail.com=CODE,friend@gmail.com=CODE2": sign-in without Google."""
+    out = {}
+    for item in os.getenv("INVITES", "").split(","):
+        email, _, code = item.partition("=")
+        if email.strip() and len(code.strip()) >= 8:
+            out[email.strip().lower()] = code.strip()
+    return out
+
+
+class InviteBody(BaseModel):
+    email: str = Field(max_length=320)
+    code: str = Field(max_length=100)
+
+
+class Throttle:
+    """At most `limit` failed sign-ins per address in `window` seconds."""
+
+    def __init__(self, limit: int = 8, window: float = 900):
+        self.limit, self.window, self.fails = limit, window, {}
+
+    def blocked(self, key: str) -> bool:
+        now_s = time.monotonic()
+        self.fails[key] = [t for t in self.fails.get(key, []) if now_s - t < self.window]
+        return len(self.fails[key]) >= self.limit
+
+    def fail(self, key: str) -> None:
+        self.fails.setdefault(key, []).append(time.monotonic())
 
 
 class AskBody(BaseModel):
@@ -140,7 +171,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         email = (info.get("email") or "").lower()
         if not email or not info.get("email_verified", False):
             return RedirectResponse("/?signin=unverified", 303)
-        allow = allowed_emails()
+        allow = allowed_emails() | set(invites())
         if allow and email not in allow:
             return RedirectResponse("/?signin=not-invited", 303)
         if purpose == "signin":
@@ -155,6 +186,24 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         from orchestrator.assistant import crypto
         store.save_connection(user["id"], purpose, crypto.encrypt(token))
         return RedirectResponse(f"/?connected={purpose}", 303)
+
+    throttle = Throttle()
+
+    @router.post("/auth/invite", dependencies=[Depends(same_site)])
+    def invite_sign_in(body: InviteBody, request: Request):
+        """Sign in with an invite code from INVITES (no Google account needed)."""
+        who = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
+            request.client.host if request.client else "?")
+        if throttle.blocked(who):
+            raise HTTPException(429, "Too many tries. Wait 15 minutes and try again.")
+        email = body.email.strip().lower()
+        expected = invites().get(email)
+        if not expected or not secrets.compare_digest(body.code.strip(), expected):
+            throttle.fail(who)
+            raise HTTPException(401, "That email and invite code don't match.")
+        user = store.upsert_user(email, email.split("@")[0].replace(".", " ").title())
+        request.session["uid"] = user["id"]
+        return {"ok": True}
 
     @router.post("/auth/logout", dependencies=[Depends(same_site)])
     def logout(request: Request):
@@ -172,7 +221,8 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     def me(request: Request):
         user = current_user(request)
         if user is None:
-            return {"signed_in": False, "google": google.configured(), "local": local_mode}
+            return {"signed_in": False, "google": google.configured(), "local": local_mode,
+                    "invites": bool(invites())}
         connected = store.connections_for(user["id"])
         return {
             "signed_in": True, "local": local_mode, "google": google.configured(),
@@ -199,6 +249,12 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
             values["tz"] = body.tz
         store.update_user(user["id"], **values)
         return {"ok": True}
+
+    @router.get("/api/demo-recordings")
+    def demo_recordings():
+        """Recorded runs, so the office has something to show before your first job."""
+        from orchestrator.web.site import load_recordings
+        return load_recordings()
 
     # ---------- the Concierge ----------
 

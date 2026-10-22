@@ -374,6 +374,7 @@ python -m orchestrator.doctor</code><button class="copy">Copy</button></div><p c
 
 <footer><div class="wrap">Relay is part of Agent Orchestrator by Muhammad Aitzaz Khan. The recordings are real runs; file paths that identify a person were removed.</div></footer>
 
+<script>/*UNIT_JS*/</script>
 <script>
 window.RELAY_RECORDINGS = /*RECORDINGS*/[];
 window.RELAY_LIVE = /*LIVE*/false;
@@ -383,7 +384,7 @@ window.RELAY_EMBED = /*EMBED*/false;
 "use strict";
 (() => {
   const ROLES = ["planner", "coder", "tester", "reviewer"];
-  const COLORS = { planner: "#5d84c9", coder: "#d8a23a", tester: "#5fa88a", reviewer: "#c8655f" };
+  const COLORS = { planner: "#6b9be6", coder: "#e6b04a", tester: "#5fc49a", reviewer: "#e07a70" };
   const DARK = { planner: "#3d5d96", coder: "#a87a22", tester: "#3f7c63", reviewer: "#94463f" };
   const JOBS = {
     planner: "Reads your request and writes a checklist of everything the result must get right.",
@@ -425,38 +426,9 @@ window.RELAY_EMBED = /*EMBED*/false;
   let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
 
   // ---------- robots (also used for the crew cards) ----------
-  function drawRobot(parent, role, x, y, scale = 1) {
-    const g = svg("g", { class: "robot", transform: `translate(${x} ${y}) scale(${scale})` }, parent);
-    const c = COLORS[role], d = DARK[role];
-    svg("rect", { x: -3, y: -66, width: 6, height: 18, fill: d }, g);                     // antenna
-    const bulb = svg("circle", { class: "bulb", cx: 0, cy: -70, r: 6, fill: "#3a464f" }, g);
-    svg("rect", { x: -36, y: -50, width: 72, height: 54, rx: 12, fill: c }, g);            // head
-    svg("rect", { x: -27, y: -41, width: 54, height: 34, rx: 7, fill: "#13202a" }, g);     // face screen
-    const open = svg("g", { class: "eyes-open" }, g);
-    svg("rect", { x: -17, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, open);
-    svg("rect", { x: 8, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, open);
-    const shut = svg("g", { class: "eyes-shut" }, g);
-    svg("rect", { x: -18, y: -25, width: 11, height: 3, rx: 1.5, fill: "#5f6e78" }, shut);
-    svg("rect", { x: 7, y: -25, width: 11, height: 3, rx: 1.5, fill: "#5f6e78" }, shut);
-    const happy = svg("g", { class: "eyes-happy" }, g);
-    svg("path", { d: "M-18 -22 q5.5 -9 11 0 M7 -22 q5.5 -9 11 0", fill: "none", stroke: "#6cc28f", "stroke-width": 3, "stroke-linecap": "round" }, happy);
-    svg("rect", { x: -10, y: 4, width: 20, height: 8, fill: d }, g);                       // neck
-    svg("rect", { x: -40, y: 10, width: 80, height: 62, rx: 14, fill: c }, g);             // body
-    svg("rect", { x: -24, y: 24, width: 48, height: 22, rx: 5, fill: d }, g);              // chest panel
-    svg("circle", { cx: -12, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.85 }, g);
-    svg("circle", { cx: 2, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.5 }, g);
-    svg("rect", { x: 10, y: 31, width: 9, height: 8, rx: 2, fill: "#ece6d9", opacity: 0.35 }, g);
-    const left = svg("rect", { class: "arm left", x: -53, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
-    const right = svg("rect", { class: "arm right", x: 41, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
-    return { g, bulb, open, shut, happy, left, right };
-  }
-  function setRobot(r, state, role) {
-    r.g.classList.toggle("active", state === "active");
-    r.bulb.setAttribute("fill", state === "active" ? COLORS[role] : state === "done" ? "#6cc28f" : "#3a464f");
-    r.open.style.opacity = state === "active" ? 1 : 0;
-    r.shut.style.opacity = state === "idle" ? 1 : 0;
-    r.happy.style.opacity = state === "done" ? 1 : 0;
-  }
+  // The robots themselves are drawn by unit.js (shared with the assistant app).
+  function drawRobot(parent, role, x, y, scale = 1) { return RelayUnit.draw(parent, role, x, y, { scale }); }
+  function setRobot(r, state) { RelayUnit.state(r, state); }
 
   // ---------- the office scene ----------
   const scene = {};
@@ -492,25 +464,27 @@ window.RELAY_EMBED = /*EMBED*/false;
     svg("line", { x1: 177, y1: 40, x2: 177, y2: 236, stroke: "#2b3944", "stroke-width": 6 }, s);
 
     // task board
-    svg("rect", { x: 418, y: 34, width: 364, height: 184, rx: 6, fill: "#d9d3c4" }, s);
-    svg("rect", { x: 418, y: 34, width: 364, height: 184, rx: 6, fill: "none", stroke: "#8b8476", "stroke-width": 6 }, s);
-    svg("text", { x: 436, y: 62, fill: "#3b3a36", "font-size": 17, "font-weight": 800 }, s).textContent = "Task board";
-    scene.boardCount = svg("text", { x: 764, y: 62, fill: "#5e5b54", "font-size": 13, "text-anchor": "end" }, s);
+    // the checklist display: a wall screen, one cell per requirement
+    svg("rect", { x: 412, y: 28, width: 376, height: 196, rx: 8, fill: "#2c353e" }, s);
+    svg("rect", { x: 420, y: 36, width: 360, height: 180, rx: 4, fill: "#081117" }, s);
+    svg("rect", { x: 420, y: 36, width: 360, height: 28, fill: "#0e1c24" }, s);
+    svg("circle", { cx: 436, cy: 50, r: 4, fill: "#5fc49a" }, s);
+    svg("text", { x: 448, y: 55, fill: "#cfe9d8", "font-size": 13, "font-weight": 700, class: "mono" }, s).textContent = "CHECKLIST";
+    scene.boardCount = svg("text", { x: 768, y: 55, fill: "#7f9aa8", "font-size": 12, "text-anchor": "end", class: "mono" }, s);
     scene.notes = svg("g", {}, s);
-    scene.boardEmpty = svg("text", { x: 600, y: 140, fill: "#7d786d", "font-size": 14, "text-anchor": "middle" }, s);
-    scene.boardEmpty.textContent = "Waiting for the Planner's checklist";
+    scene.boardEmpty = svg("text", { x: 600, y: 146, fill: "#5d7482", "font-size": 13, "text-anchor": "middle", class: "mono" }, s);
+    scene.boardEmpty.textContent = "awaiting plan from PLN-01";
 
     // test light and clock
     svg("rect", { x: 832, y: 70, width: 56, height: 92, rx: 8, fill: "#26343f" }, s);
     scene.testLight = svg("circle", { cx: 860, cy: 104, r: 16, fill: "#3a464f" }, s);
     svg("text", { x: 860, y: 148, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s).textContent = "Tests";
-    svg("circle", { cx: 1010, cy: 116, r: 46, fill: "#ece6d9" }, s);
-    svg("circle", { cx: 1010, cy: 116, r: 46, fill: "none", stroke: "#2b3944", "stroke-width": 6 }, s);
-    for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; svg("line", { x1: 1010 + Math.sin(a) * 36, y1: 116 - Math.cos(a) * 36, x2: 1010 + Math.sin(a) * 41, y2: 116 - Math.cos(a) * 41, stroke: "#3b3a36", "stroke-width": 2 }, s); }
-    scene.hourHand = svg("line", { x1: 1010, y1: 116, x2: 1010, y2: 92, stroke: "#3b3a36", "stroke-width": 4, "stroke-linecap": "round" }, s);
-    scene.minHand = svg("line", { x1: 1010, y1: 116, x2: 1010, y2: 80, stroke: "#c8655f", "stroke-width": 3, "stroke-linecap": "round" }, s);
-    svg("circle", { cx: 1010, cy: 116, r: 4, fill: "#3b3a36" }, s);
-    scene.clockLabel = svg("text", { x: 1010, y: 186, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s);
+    // run timer and round counter
+    svg("rect", { x: 930, y: 62, width: 168, height: 104, rx: 8, fill: "#2c353e" }, s);
+    svg("rect", { x: 938, y: 70, width: 152, height: 88, rx: 4, fill: "#081117" }, s);
+    svg("text", { x: 950, y: 90, fill: "#7f9aa8", "font-size": 11, class: "mono" }, s).textContent = "ELAPSED";
+    scene.clockLabel = svg("text", { x: 1014, y: 126, fill: "#e6b04a", "font-size": 30, "font-weight": 600, "text-anchor": "middle", class: "mono" }, s);
+    scene.roundLabel = svg("text", { x: 950, y: 148, fill: "#7f9aa8", "font-size": 11, class: "mono" }, s);
 
     scene.stations = {};
     for (const role of ROLES) {
@@ -523,13 +497,16 @@ window.RELAY_EMBED = /*EMBED*/false;
       st.bulb = svg("ellipse", { class: "lamp-bulb", cx: cx, cy: 262, rx: 22, ry: 5, fill: "#3a464f" }, s);
       // floor shadow, chair, robot
       svg("ellipse", { cx: cx, cy: 566, rx: 150, ry: 14, fill: "#10171d" }, s);
-      svg("rect", { x: cx - 128, y: 396, width: 86, height: 100, rx: 10, fill: "#2a3640" }, s);
+      svg("rect", { x: cx - 128, y: 396, width: 86, height: 100, rx: 10, fill: "#1e2830", stroke: "#2f3b45", "stroke-width": 2 }, s);
       st.robot = drawRobot(s, role, cx - 86, 386);
       // desk
-      svg("rect", { x: cx - 140, y: 470, width: 280, height: 14, rx: 3, fill: "#5a4636" }, s);
-      svg("rect", { x: cx - 128, y: 484, width: 256, height: 70, fill: "#3e3127" }, s);
-      svg("rect", { x: cx - 60, y: 498, width: 120, height: 32, rx: 4, fill: "#c9b37a" }, s);       // name plate
-      st.name = svg("text", { x: cx, y: 520, fill: "#3a2e14", "font-size": 17, "font-weight": 800, "text-anchor": "middle" }, s);
+      // workstation: gunmetal console with a lit name display
+      svg("rect", { x: cx - 140, y: 470, width: 280, height: 12, rx: 3, fill: "#56636f" }, s);
+      svg("rect", { x: cx - 140, y: 480, width: 280, height: 3, fill: COLORS[role], opacity: 0.55 }, s);
+      svg("rect", { x: cx - 128, y: 483, width: 256, height: 71, fill: "#2c353e" }, s);
+      svg("path", { d: `M${cx - 120} 492 H${cx + 120} M${cx - 120} 546 H${cx + 120}`, stroke: "#3b4752", "stroke-width": 1.5 }, s);
+      svg("rect", { x: cx - 62, y: 499, width: 124, height: 32, rx: 4, fill: "#081117", stroke: "#3b4752", "stroke-width": 1.5 }, s);
+      st.name = svg("text", { x: cx, y: 521, fill: COLORS[role], "font-size": 16, "font-weight": 700, "text-anchor": "middle", class: "mono" }, s);
       st.name.textContent = titles[role];
       st.status = svg("text", { x: cx, y: 586, fill: "#a7b0b6", "font-size": 13, "text-anchor": "middle" }, s);
       // keyboard
@@ -797,10 +774,8 @@ window.RELAY_EMBED = /*EMBED*/false;
     scene.testLight.setAttribute("fill", m.gate === null ? "#3a464f" : m.gate ? "#6cc28f" : "#e2766b");
     // clock: elapsed real time of the run
     const elapsed = m.startTime != null && m.now != null ? m.now - m.startTime : 0;
-    const minA = (elapsed / 60) * 360, hrA = (elapsed / 3600) * 360 + 300;
-    scene.minHand.setAttribute("transform", `rotate(${minA} 1010 116)`);
-    scene.hourHand.setAttribute("transform", `rotate(${hrA} 1010 116)`);
-    scene.clockLabel.textContent = `Real time ${fmt(elapsed)}`;
+    scene.clockLabel.textContent = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(Math.floor(elapsed % 60)).padStart(2, "0")}`;
+    scene.roundLabel.textContent = m.finished ? (m.finished.status === "completed" ? "STATUS  APPROVED" : "STATUS  STOPPED") : `ROUND   ${Math.max(1, m.round || 1)} OF 3`;
     renderBoard(m); renderFeed(m); renderBigScreen(m); renderChecks(m); renderResult(m);
   }
 
@@ -809,14 +784,14 @@ window.RELAY_EMBED = /*EMBED*/false;
     scene.boardEmpty.style.display = m.checklist.length ? "none" : "";
     const n = m.checklist.length;
     const passed = m.checklist.filter((c) => c.s === "pass").length;
-    scene.boardCount.textContent = n ? `${passed} of ${n} checked` : "";
-    const cols = n > 14 ? 10 : 7, size = n > 14 ? 30 : 40, gap = 4;
+    scene.boardCount.textContent = n ? `${passed}/${n} VERIFIED` : "";
+    const cols = n > 14 ? 10 : 7, size = n > 14 ? 30 : 42, gap = 6;
     m.checklist.forEach((c, i) => {
-      const x = 436 + (i % cols) * (size + gap), y = 76 + Math.floor(i / cols) * (size + gap);
-      const fill = c.s === "pass" ? "#8fd3a8" : c.s === "fail" ? "#efa093" : "#f1df8a";
+      const x = 434 + (i % cols) * (size + gap), y = 76 + Math.floor(i / cols) * (size + gap);
+      const [fill, stroke, ink] = c.s === "pass" ? ["#123a2a", "#5fc49a", "#a8ecc8"] : c.s === "fail" ? ["#3d1a1a", "#e07a70", "#f4b3ab"] : ["#1a2229", "#5a4a26", "#e6b04a"];
       const g = svg("g", {}, scene.notes);
-      svg("rect", { x, y, width: size, height: size, rx: 2, fill, transform: `rotate(${(i % 3) - 1} ${x + size / 2} ${y + size / 2})` }, g);
-      const tx = svg("text", { x: x + size / 2, y: y + size / 2 + 5, "font-size": n > 14 ? 11 : 13, "font-weight": 800, fill: "#3b3a36", "text-anchor": "middle" }, g);
+      svg("rect", { x, y, width: size, height: size - 8, rx: 4, fill, stroke, "stroke-width": 1.5 }, g);
+      const tx = svg("text", { x: x + size / 2, y: y + (size - 8) / 2 + 4, "font-size": n > 14 ? 10 : 12, "font-weight": 600, fill: ink, "text-anchor": "middle", class: "mono" }, g);
       tx.textContent = c.id;
     });
   }

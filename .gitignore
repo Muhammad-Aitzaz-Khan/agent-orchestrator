@@ -36,3 +36,7 @@ drafts/
 # The assistant's local data and secrets
 relay.db
 relay.secret
+
+# Deployment secrets made by deploy/deploy.py (never commit)
+deploy/keys.env
+deploy/generated.env

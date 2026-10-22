@@ -14,7 +14,9 @@ from pathlib import Path
 SKIP_DIRS = {".venv", ".git", "__pycache__", ".pytest_cache", ".ruff_cache", "runs"}
 BLOCKED_FILES = {".env"}
 PROTECTED_FILES = {"conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"}
-SECRET_ENV_WORDS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+# Environment variables whose names contain any of these are never passed to model-written code.
+SECRET_ENV_WORDS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "DATABASE", "INVITE", "VAPID", "GOOGLE",
+                    "CREDENTIAL", "AUTH")
 
 MAX_READ_CHARS = 5000
 MAX_WRITE_CHARS = 100_000

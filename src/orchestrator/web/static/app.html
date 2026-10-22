@@ -5,42 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Relay</title>
 <meta name="description" content="A personal assistant run by a small crew of robots. Ask once; they work while you're away and let you know when it's done.">
-<meta name="theme-color" content="#121a21">
+<meta name="theme-color" content="#0b1117">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/unit.js"></script>
 <script src="/static/vendor/marked.min.js" defer></script>
 <script src="/static/vendor/purify.min.js" defer></script>
 <style>
-/* Relay: a night-shift office of tin-toy robots who run your errands.
-   One bold element: the front desk on Today, where the Concierge takes your request.
-   Everything else is quiet slate; colour means a robot or a kind of work. */
+/* Relay: a control room for a crew of five robots who run your errands.
+   One bold element: the command deck on Today, where you ask and the crew bay shows what each
+   unit is doing. Everything else is quiet slate on a drafting grid; colour means a robot or a
+   kind of work, and the five crew colours run along the deck's top edge. */
 :root {
-  --bg: #121a21;
-  --panel: #1b2630;
-  --raised: #23313c;
-  --line: #33434f;
-  --ink: #eee8dc;
-  --muted: #a8b1b7;
-  --dim: #7b8790;
+  --bg: #0b1117;
+  --panel: #111b23;
+  --raised: #182530;
+  --line: #22313c;
+  --line-2: #2f414d;
+  --ink: #edf0ee;
+  --muted: #9fb0ba;
+  --dim: #6d808c;
   --lamp: #f2b45a;
   --lamp-ink: #2a1d08;
+  --cyan: #5cc8d6;
   --card: #e4ebee;      /* the note card results are written on */
   --card-ink: #1f2a33;
   --card-rule: #c3d3dc;
   --card-margin: #d98b84;
-  --cobalt: #5d84c9;
-  --mustard: #d8a23a;
-  --sage: #5fa88a;
-  --brick: #c8655f;
-  --violet: #9a83d9;
-  --good: #6cc28f;
-  --bad: #e2766b;
+  --cobalt: #6b9be6;
+  --mustard: #e6b04a;
+  --sage: #5fc49a;
+  --brick: #e07a70;
+  --violet: #a08ce0;
+  --good: #6fd39b;
+  --bad: #ef7f74;
+  --crew: linear-gradient(90deg, var(--violet), var(--cobalt), var(--mustard), var(--sage), var(--brick));
+  --surface: linear-gradient(180deg, #13202a, #0e1820);
   --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
   --radius-s: 6px;
   --radius-m: 12px;
   --radius-l: 20px;
@@ -49,7 +56,14 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.5; }
+body { margin: 0; color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.5;
+  background-color: var(--bg);
+  /* a faint drafting grid under everything, lit from two corners */
+  background-image: radial-gradient(900px 520px at 88% -12%, rgba(92, 200, 214, 0.09), transparent 62%),
+    radial-gradient(760px 460px at -12% 112%, rgba(242, 180, 90, 0.07), transparent 62%),
+    linear-gradient(rgba(140, 180, 205, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 180, 205, 0.045) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px; background-attachment: fixed; }
 a { color: inherit; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -62,7 +76,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.1; ma
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-weight: 700; text-decoration: none; }
 .btn:hover { border-color: var(--dim); }
-.btn.primary { background: var(--lamp); border-color: var(--lamp); color: var(--lamp-ink); }
+.btn.primary { background: var(--lamp); border-color: var(--lamp); color: var(--lamp-ink); box-shadow: 0 8px 22px -10px rgba(242, 180, 90, 0.75); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.quiet { background: transparent; }
 .btn.danger { color: var(--bad); background: transparent; }
@@ -72,12 +86,14 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.1; ma
 
 /* ---------- shell ---------- */
 .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
-.rail { position: sticky; top: 0; height: 100vh; height: 100dvh; padding: 20px 14px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+.rail { position: sticky; top: 0; height: 100vh; height: 100dvh; padding: 20px 14px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; background: rgba(9, 14, 19, 0.82); backdrop-filter: blur(8px); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; text-decoration: none; font-family: var(--display); font-weight: 800; font-size: 1.5rem; font-variation-settings: "wdth" 85; }
 .brand svg { width: 34px; height: 34px; }
 .nav-link { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 12px; border-radius: var(--radius-m); text-decoration: none; color: var(--muted); font-weight: 700; }
 .nav-link:hover { color: var(--ink); background: var(--panel); }
+.nav-link { position: relative; }
 .nav-link[aria-current="page"] { color: var(--ink); background: var(--raised); }
+.nav-link[aria-current="page"]::before { content: ""; position: absolute; left: -14px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--lamp); }
 .nav-link .count { margin-left: auto; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; background: var(--lamp); color: var(--lamp-ink); font-size: 0.8rem; display: grid; place-items: center; }
 .rail .me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--radius-m); text-decoration: none; }
 .rail .me:hover { background: var(--panel); }
@@ -89,19 +105,17 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.1; ma
 main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width: 100%; }
 .tabbar { display: none; }
 
-/* ---------- Today: the front desk ---------- */
-.desk { position: relative; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 4px 28px; align-items: end; padding: 26px 26px 0; border-radius: var(--radius-l); background:
-  radial-gradient(ellipse 340px 220px at 95px 130px, rgba(242, 180, 90, 0.22), transparent 70%), var(--panel); border: 1px solid var(--line); overflow: hidden; }
-.desk-top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.desk h1 { font-size: clamp(2rem, 4.2vw, 3.1rem); font-variation-settings: "wdth" 80, "opsz" 96; font-weight: 800; letter-spacing: -0.01em; }
-.desk .date { color: var(--muted); }
-.concierge-art { align-self: end; width: 190px; height: 210px; display: block; }
-.desk-counter { grid-column: 1 / -1; height: 18px; margin: 0 -26px; background: #5a4636; box-shadow: 0 6px 0 #3e3127; }
-.ask { position: relative; align-self: center; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-l); padding: 14px; margin-bottom: 22px; display: grid; gap: 10px; }
-.ask::before { content: ""; position: absolute; left: -11px; top: 38px; width: 20px; height: 20px; background: var(--bg); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
-.ask:focus-within { border-color: var(--lamp); }
-.ask:focus-within::before { border-color: var(--lamp); }
-.ask label { font-family: var(--display); font-weight: 700; font-size: 1.15rem; padding: 2px 4px 0; }
+/* ---------- Today: the command deck ---------- */
+.deck { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; padding: 28px; border-radius: var(--radius-l);
+  background: var(--surface); border: 1px solid var(--line-2); box-shadow: 0 34px 70px -40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.04); overflow: hidden; }
+.deck::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--crew); }
+.deck-main { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.deck-head { display: grid; gap: 2px; }
+.deck h1 { font-size: clamp(2rem, 4vw, 3.2rem); font-variation-settings: "wdth" 80, "opsz" 96; font-weight: 800; letter-spacing: -0.015em; }
+.deck .date { color: var(--muted); }
+.ask { position: relative; background: rgba(6, 11, 15, 0.7); border: 1px solid var(--line-2); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.ask:focus-within { border-color: var(--lamp); box-shadow: 0 0 0 4px rgba(242, 180, 90, 0.12); }
+.ask label { font-family: var(--display); font-weight: 700; font-size: 1.12rem; padding: 2px 4px 0; }
 .ask textarea { width: 100%; min-height: 56px; max-height: 240px; resize: none; border: 0; background: transparent; outline: none; padding: 4px; font-size: 1.08rem; }
 .ask textarea::placeholder { color: var(--dim); }
 .ask-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -109,14 +123,39 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .attached { display: flex; gap: 6px; flex-wrap: wrap; }
 .file-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--raised); font-size: 0.88rem; }
 .file-chip button { width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
-.ideas { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; }
-.idea { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 13px 0 9px; font-size: 0.94rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); }
-.idea:hover { color: var(--ink); border-color: var(--dim); }
-.idea .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #121a21; }
+.ideas { display: flex; gap: 8px; flex-wrap: wrap; }
+.idea { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 13px 0 8px; font-size: 0.92rem; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, 0.02); color: var(--muted); }
+.idea:hover { color: var(--ink); border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.idea .dot { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--c); color: #0b1117; }
 .idea .dot svg { width: 14px; height: 14px; }
 
+/* the crew: five units on their pads, lit by what they are doing */
+.bay { display: grid; gap: 12px; text-decoration: none; border-radius: 16px; padding: 14px 14px 16px; min-width: 0;
+  background: linear-gradient(180deg, rgba(6, 11, 15, 0.2), rgba(6, 11, 15, 0.75)); border: 1px solid var(--line); }
+.bay:hover { border-color: var(--line-2); }
+.bay-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 0 4px; }
+.bay-head h2 { font-size: 1.2rem; }
+.bay-link { display: inline-flex; gap: 8px; align-items: center; color: var(--lamp); font-weight: 700; }
+.crew-strip { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.crew-cell { display: grid; justify-items: center; text-align: center; gap: 1px; padding: 10px 6px 12px; border-radius: 14px; border: 1px solid transparent; background: rgba(255, 255, 255, 0.015); min-width: 0; }
+.crew-cell svg { width: 100%; max-width: 120px; height: auto; }
+.crew-cell.active { border-color: color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 7%, transparent); }
+.crew-cell .uid { font-family: var(--mono); font-size: 0.74rem; color: var(--c); margin-top: 6px; }
+.crew-cell strong { font-family: var(--display); font-size: 1rem; }
+.crew-cell .doing { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 0.82rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew-cell.active .doing { color: var(--ink); }
+.crew-cell .led { width: 7px; height: 7px; border-radius: 50%; background: #33424d; flex: none; }
+.crew-cell.active .led { background: var(--c); box-shadow: 0 0 10px var(--c); animation: pulse 1.2s infinite; }
+.crew-cell.done .led { background: var(--good); }
+.robot .arm { transform-box: fill-box; transform-origin: 50% 0%; }
+.robot.active .arm.left { animation: type 0.32s ease-in-out infinite alternate; }
+.robot.active .arm.right { animation: type 0.32s ease-in-out infinite alternate-reverse; }
+@keyframes type { from { transform: rotate(-7deg); } to { transform: rotate(5deg); } }
+.robot.active .bulb { animation: pulse 1.4s ease-in-out infinite; }
+.robot .eyes-open, .robot .eyes-shut, .robot .eyes-happy { transition: opacity 200ms; }
+
 /* the Concierge's reply */
-.reply { margin-top: 18px; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start; }
+.reply { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start; }
 .reply .face { width: 44px; height: 46px; }
 .reply-body { display: grid; gap: 12px; }
 .say { background: var(--raised); border-radius: 4px var(--radius-m) var(--radius-m) var(--radius-m); padding: 10px 14px; border-left: 3px solid var(--violet); max-width: 68ch; }
@@ -124,9 +163,10 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .thinking i { width: 7px; height: 7px; border-radius: 50%; background: var(--violet); animation: bob 1s infinite ease-in-out; }
 .thinking i:nth-child(2) { animation-delay: 0.15s; } .thinking i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes bob { 50% { transform: translateY(-5px); opacity: 0.6; } }
-.plan { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px; display: grid; gap: 10px; max-width: 640px; background: var(--panel); }
+.plan { border: 1px solid var(--line-2); border-radius: var(--radius-m); padding: 18px; display: grid; gap: 10px; max-width: 640px; background: var(--surface); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
 .plan-head { display: flex; gap: 12px; align-items: center; }
-.skill-mark { width: 40px; height: 40px; border-radius: var(--radius-m); display: grid; place-items: center; background: var(--c); color: #121a21; flex: none; }
+.skill-mark { width: 40px; height: 40px; border-radius: var(--radius-m); display: grid; place-items: center; color: #0b1117; flex: none;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--c) 100%, #fff 12%), color-mix(in srgb, var(--c) 78%, #000)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
 .skill-mark svg { width: 22px; height: 22px; }
 .plan h3 { font-size: 1.25rem; }
 .plan .kind { color: var(--muted); font-size: 0.92rem; }
@@ -137,7 +177,8 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .plan .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---------- sections on Today ---------- */
-.today-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; margin-top: 34px; }
+.today-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; margin-top: 30px; }
+.timeline-wrap, .latest-wrap { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 18px; background: rgba(17, 27, 35, 0.6); }
 .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
 .section-head h2 { font-size: 1.45rem; font-variation-settings: "wdth" 85; }
 .section-head a { color: var(--muted); font-size: 0.92rem; }
@@ -149,7 +190,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .timeline .pin { width: 14px; height: 14px; border-radius: 50%; background: var(--c); margin: 5px 0 0 3px; box-shadow: 0 0 0 4px var(--bg); z-index: 1; }
 .timeline .what strong { display: block; }
 .timeline .what span { color: var(--muted); font-size: 0.9rem; }
-.setup { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px; display: grid; gap: 4px; }
+.setup { border: 1px solid var(--line-2); border-radius: var(--radius-m); padding: 18px; display: grid; gap: 4px; background: var(--surface); }
 .meter { height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; margin: 6px 0 8px; }
 .meter span { display: block; height: 100%; background: var(--lamp); border-radius: 4px; transition: width 400ms ease; }
 .step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 48px; }
@@ -210,9 +251,23 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .empty svg { width: 160px; height: 140px; }
 .empty h2 { color: var(--ink); font-size: 1.4rem; }
 
+/* ---------- Agents ---------- */
+.agents { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.list-label { font-family: var(--body); font-size: 0.82rem; color: var(--dim); font-weight: 700; margin: 16px 4px 6px; }
+.pick { width: 100%; text-align: left; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border-radius: var(--radius-m); border: 1px solid transparent; background: transparent; }
+.pick:hover { background: var(--panel); }
+.pick[aria-pressed="true"] { background: var(--raised); border-color: var(--line-2); }
+.pick .skill-mark { width: 36px; height: 36px; border-radius: 10px; }
+.pick .skill-mark svg { width: 18px; height: 18px; }
+.pick strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick .snippet { color: var(--muted); font-size: 0.86rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agents-stage { display: grid; gap: 14px; min-width: 0; }
+.stage-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.stage-head h1 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-variation-settings: "wdth" 85; }
+
 /* ---------- Routines ---------- */
 .routines { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
-.routine { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px; display: grid; gap: 10px; background: var(--panel); border-top: 4px solid var(--c); }
+.routine { border: 1px solid var(--line-2); border-radius: var(--radius-m); padding: 18px; display: grid; gap: 10px; background: var(--surface); box-shadow: inset 0 3px 0 var(--c); }
 .routine.off { opacity: 0.62; }
 .routine-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
 .routine h3 { font-size: 1.15rem; }
@@ -238,7 +293,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 
 /* ---------- Settings ---------- */
 .settings { display: grid; gap: 22px; max-width: 720px; }
-.card { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 18px; display: grid; gap: 14px; background: var(--panel); }
+.card { border: 1px solid var(--line-2); border-radius: var(--radius-m); padding: 20px; display: grid; gap: 14px; background: var(--surface); }
 .card h2 { font-size: 1.25rem; }
 .field { display: grid; gap: 6px; }
 .field label { font-weight: 700; }
@@ -254,10 +309,14 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .hero h1 { font-size: clamp(2.4rem, 6vw, 4.4rem); font-variation-settings: "wdth" 78, "opsz" 96; font-weight: 800; letter-spacing: -0.015em; line-height: 0.98; }
 .hero p { font-size: 1.15rem; color: var(--muted); max-width: 46ch; margin: 18px 0 26px; }
 .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+.invite { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 18px; border-radius: var(--radius-m); border: 1px solid var(--line-2); background: var(--surface); margin-bottom: 14px; max-width: 560px; }
+.invite .toolbar { grid-column: 1 / -1; }
+.invite input { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--bg); }
+@media (max-width: 520px) { .invite { grid-template-columns: minmax(0, 1fr); } }
 .hero-art { width: 100%; height: auto; border-radius: var(--radius-l); background: var(--panel); border: 1px solid var(--line); }
 .notice { background: #3a2f1f; border-radius: var(--radius-m); padding: 12px 16px; margin-bottom: 18px; }
 .uses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.use { border-radius: var(--radius-m); padding: 16px; background: var(--panel); border: 1px solid var(--line); display: grid; gap: 8px; align-content: start; }
+.use { border-radius: var(--radius-m); padding: 18px; background: var(--surface); border: 1px solid var(--line-2); display: grid; gap: 8px; align-content: start; }
 .use h3 { font-size: 1.1rem; }
 .use p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 .band { padding: 56px 0 0; }
@@ -285,7 +344,9 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 
 /* ---------- small screens ---------- */
 @media (max-width: 960px) {
-  .today-grid, .inbox, .hero { grid-template-columns: minmax(0, 1fr); }
+  .today-grid, .inbox, .hero, .agents { grid-template-columns: minmax(0, 1fr); }
+  .deck { grid-template-columns: minmax(0, 1fr); }
+  .agents-stage { order: -1; }
   .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inbox.has-detail .list-col { display: none; }
   .inbox:not(.has-detail) .detail { display: none; }
@@ -298,14 +359,13 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   .tabbar a { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding-top: 6px; text-decoration: none; color: var(--dim); font-size: 0.74rem; font-weight: 700; position: relative; }
   .tabbar a[aria-current="page"] { color: var(--lamp); }
   .tabbar .count { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; border-radius: 9px; background: var(--lamp); color: var(--lamp-ink); font-size: 0.7rem; display: grid; place-items: center; padding: 0 4px; }
-  .desk { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 0; }
-  .concierge-art { display: none; }
-  .ask::before { display: none; }
-  .desk-counter { margin: 0 -16px; }
+  .deck { grid-template-columns: minmax(0, 1fr); padding: 20px 16px; gap: 18px; }
+  .crew-strip { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -14px; padding: 0 14px 4px; scrollbar-width: none; }
+  .crew-cell { flex: 0 0 40%; scroll-snap-align: start; }
   .uses, .flow { grid-template-columns: minmax(0, 1fr); }
   .promises { columns: 1; }
   .office-frame { min-height: 420px; }
-  .ideas { flex-wrap: nowrap; overflow-x: auto; margin: 16px -16px 0; padding: 0 16px 4px; scrollbar-width: none; }
+  .ideas { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scrollbar-width: none; }
   .idea { flex: none; }
   .toasts { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
@@ -380,6 +440,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     today: "M12 3v2M12 19v2M5 12H3M21 12h-2M6.3 6.3 4.9 4.9M19.1 19.1l-1.4-1.4M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
     inbox: "M3 13h5l1.5 3h5L16 13h5M5 5h14l2 8v6H3v-6l2-8Z",
     routines: "M12 7v5l3 2M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4",
+    agents: "M12 2v3M7 5h10l3 3v7l-3 3H7l-3-3V8l3-3Zm1 6h3m3 0h3M9 15h6M2 10v3m20-3v3",
     files: "M14 3H6v18h12V7l-4-4Zm0 0v4h4M9 13h6M9 17h6",
     settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.5 3h-5L9 5.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.5 2.6h5l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z",
     clip: "M20 11.5 12.5 19a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7L10.2 16.7a1.7 1.7 0 0 1-2.4-2.4L14.5 7.6",
@@ -421,71 +482,78 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     return h("span", { class: "skill-mark", style: `--c: ${color}`, "aria-hidden": "true" }, icon(name));
   }
 
-  // ---------- robots ----------
-  const ROBOT = { concierge: ["#9a83d9", "#6e58ad"], planner: ["#5d84c9", "#3d5d96"], coder: ["#d8a23a", "#a87a22"], tester: ["#5fa88a", "#3f7c63"], reviewer: ["#c8655f", "#94463f"] };
-  function robot(parent, role, x, y, { scale = 1, wave = false, happy = false, tie = false } = {}) {
-    const [c, d] = ROBOT[role];
-    const g = s("g", { class: "robot", transform: `translate(${x} ${y}) scale(${scale})` }, parent);
-    s("rect", { x: -3, y: -66, width: 6, height: 18, fill: d }, g);
-    s("circle", { cx: 0, cy: -70, r: 6, fill: c }, g);
-    s("rect", { x: -36, y: -50, width: 72, height: 54, rx: 12, fill: c }, g);
-    s("rect", { x: -27, y: -41, width: 54, height: 34, rx: 7, fill: "#13202a" }, g);
-    if (happy) s("path", { d: "M-18 -22 q5.5 -9 11 0 M7 -22 q5.5 -9 11 0", fill: "none", stroke: "#6cc28f", "stroke-width": 3, "stroke-linecap": "round" }, g);
-    else { const e = s("g", { class: "eyes" }, g); s("rect", { x: -17, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, e); s("rect", { x: 8, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, e); }
-    s("rect", { x: -10, y: 4, width: 20, height: 8, fill: d }, g);
-    s("rect", { x: -40, y: 10, width: 80, height: 62, rx: 14, fill: c }, g);
-    s("rect", { x: -24, y: 24, width: 48, height: 22, rx: 5, fill: d }, g);
-    s("circle", { cx: -12, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.85 }, g);
-    s("circle", { cx: 2, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.5 }, g);
-    if (tie) s("path", { d: "M-10 12 L0 18 L10 12 L10 24 L0 18 L-10 24 Z", fill: "#f2b45a" }, g);
-    s("rect", { x: -53, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
-    s("rect", { class: wave ? "arm wave" : "arm", x: 41, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
-    return g;
+  // ---------- robots (drawn by unit.js, shared with the office) ----------
+  function robot(parent, role, x, y, { scale = 1, wave = false, state: st = "active" } = {}) {
+    const parts = RelayUnit.draw(parent, role, x, y, { scale, wave });
+    RelayUnit.state(parts, st);
+    parts.g.classList.remove("active");
+    return parts;
   }
   function face(role, cls = "face") {
     const svgEl = document.createElementNS(NS, "svg");
-    svgEl.setAttribute("viewBox", "-56 -80 112 112"); svgEl.setAttribute("aria-hidden", "true"); svgEl.setAttribute("class", cls);
-    robot(svgEl, role, 0, 0, { tie: role === "concierge" });
-    return svgEl;
-  }
-  function conciergeArt() {
-    const svgEl = document.createElementNS(NS, "svg");
-    svgEl.setAttribute("viewBox", "0 0 190 210"); svgEl.setAttribute("class", "concierge-art"); svgEl.setAttribute("aria-hidden", "true");
-    robot(svgEl, "concierge", 106, 124, { wave: true, tie: true, scale: 1.05 });
-    s("rect", { x: 2, y: 186, width: 38, height: 10, rx: 3, fill: "#f2b45a" }, svgEl);     // desk bell
-    s("path", { d: "M6 186a15 15 0 0 1 30 0", fill: "#f2b45a" }, svgEl);
-    s("circle", { cx: 21, cy: 169, r: 3.5, fill: "#f2b45a" }, svgEl);
-    s("rect", { x: 126, y: 176, width: 52, height: 30, rx: 3, fill: "#e4ebee", transform: "rotate(-6 152 191)" }, svgEl);  // note pad
-    s("path", { d: "M133 186h36M133 194h28", stroke: "#a9bcc7", "stroke-width": 2, transform: "rotate(-6 152 191)" }, svgEl);
+    svgEl.setAttribute("viewBox", "-48 -78 96 84"); svgEl.setAttribute("aria-hidden", "true"); svgEl.setAttribute("class", cls);
+    robot(svgEl, role, 0, 0);
     return svgEl;
   }
   function emptyArt(kind) {
     const svgEl = document.createElementNS(NS, "svg"); svgEl.setAttribute("viewBox", "0 0 160 140"); svgEl.setAttribute("aria-hidden", "true");
-    s("ellipse", { cx: 80, cy: 128, rx: 60, ry: 8, fill: "#1b2630" }, svgEl);
-    if (kind === "sleep") {
-      robot(svgEl, "planner", 80, 96, { scale: 0.75 });
-      s("rect", { x: 56, y: 47, width: 48, height: 26, rx: 5, fill: "#13202a" }, svgEl);
-      s("path", { d: "M64 61h10M86 61h10", stroke: "#5f6e78", "stroke-width": 3, "stroke-linecap": "round" }, svgEl);
-      const z = s("text", { x: 112, y: 40, fill: "#a8b1b7", "font-size": 18, "font-family": "Bricolage Grotesque, sans-serif", "font-weight": 700 }, svgEl); z.textContent = "z z";
-    } else if (kind === "files") {
-      robot(svgEl, "tester", 70, 96, { scale: 0.75 });
-      s("rect", { x: 100, y: 70, width: 34, height: 44, rx: 3, fill: "#e4ebee" }, svgEl);
-      s("path", { d: "M106 82h22M106 90h22M106 98h14", stroke: "#c3d3dc", "stroke-width": 2 }, svgEl);
-    } else {
-      robot(svgEl, "coder", 80, 96, { scale: 0.75, happy: true });
-    }
+    s("ellipse", { cx: 80, cy: 130, rx: 56, ry: 7, fill: "#16222b" }, svgEl);
+    robot(svgEl, kind === "files" ? "tester" : kind === "sleep" ? "planner" : "coder", 80, 98, { scale: 0.72, state: kind === "sleep" ? "idle" : kind === "done" ? "done" : "active" });
     return svgEl;
   }
   function brandMark() {
     const svgEl = document.createElementNS(NS, "svg"); svgEl.setAttribute("viewBox", "0 0 34 34"); svgEl.setAttribute("aria-hidden", "true");
-    s("rect", { x: 3, y: 9, width: 28, height: 22, rx: 7, fill: "#9a83d9" }, svgEl);
-    s("rect", { x: 8, y: 14, width: 18, height: 11, rx: 3, fill: "#13202a" }, svgEl);
-    s("rect", { x: 11, y: 17, width: 4, height: 5, rx: 1.5, fill: "#cfe9d8" }, svgEl);
-    s("rect", { x: 19, y: 17, width: 4, height: 5, rx: 1.5, fill: "#cfe9d8" }, svgEl);
-    s("rect", { x: 15.5, y: 3, width: 3, height: 7, fill: "#6e58ad" }, svgEl);
-    s("circle", { cx: 17, cy: 3.5, r: 3, fill: "#f2b45a" }, svgEl);
+    s("path", { d: "M8 8 H26 L31 13 V25 L27 30 H7 L3 25 V13 Z", fill: "#4a5763", stroke: "#2c353e", "stroke-width": 1.5 }, svgEl);
+    s("rect", { x: 7, y: 14, width: 20, height: 9, rx: 3, fill: "#081117" }, svgEl);
+    s("rect", { x: 9.5, y: 17, width: 6, height: 3, rx: 1.5, fill: "#a08ce0" }, svgEl);
+    s("rect", { x: 18.5, y: 17, width: 6, height: 3, rx: 1.5, fill: "#a08ce0" }, svgEl);
+    s("rect", { x: 16, y: 2, width: 2, height: 6, fill: "#2c353e" }, svgEl);
+    s("circle", { cx: 17, cy: 2.5, r: 2.5, fill: "#f2b45a" }, svgEl);
     return svgEl;
   }
+
+  // The crew bay: the five units on their platform, lit by what they are doing right now.
+  const CREW = [["concierge", "Concierge"], ["planner", "Planner"], ["coder", "Builder"], ["tester", "Checker"], ["reviewer", "Reviewer"]];
+  function crewStates() {
+    const live = state.live;
+    const out = Object.fromEntries(CREW.map(([r]) => [r, { s: "idle", text: "standing by" }]));
+    if (state.thinking) out.concierge = { s: "active", text: "reading your request" };
+    if (live) {
+      const done = new Set(live.events.filter((e) => e.type === "agent_finished").map((e) => e.role));
+      const started = live.events.filter((e) => e.type === "agent_started");
+      const current = started.length ? started[started.length - 1].role : null;
+      for (const [r] of CREW.slice(1)) {
+        if (r === current && !done.has(r)) out[r] = { s: "active", text: `on ${clip(live.title, 24)}` };
+        else if (done.has(r)) out[r] = { s: "done", text: "handed over" };
+      }
+      if (!current) out.planner = { s: "active", text: live.status === "queued" ? "next in line" : "getting ready" };
+    }
+    return out;
+  }
+  function crewBay() {
+    const states = crewStates();
+    const cells = CREW.map(([r, name]) => {
+      const st = states[r], c = RelayUnit.ROLE[r].c;
+      const art = document.createElementNS(NS, "svg");
+      art.setAttribute("viewBox", "-62 -86 124 176"); art.setAttribute("aria-hidden", "true");
+      const defs = s("defs", {}, art);
+      const rg = s("radialGradient", { id: `pad-${r}` }, defs);
+      s("stop", { offset: 0, "stop-color": c, "stop-opacity": 0.6 }, rg);
+      s("stop", { offset: 1, "stop-color": c, "stop-opacity": 0 }, rg);
+      s("ellipse", { cx: 0, cy: 82, rx: 58, ry: 10, fill: st.s === "active" ? `url(#pad-${r})` : "#0c151b" }, art);
+      s("rect", { x: -36, y: 77, width: 72, height: 6, rx: 3, fill: st.s === "active" ? c : st.s === "done" ? "#2f5a45" : "#22303a" }, art);
+      const parts = RelayUnit.draw(art, r, 0, 2, { scale: 1 });
+      RelayUnit.state(parts, st.s);
+      return h("li", { class: `crew-cell ${st.s}`, style: `--c: ${c}` }, art,
+        h("span", { class: "uid", text: RelayUnit.ROLE[r].id }), h("strong", { text: name }),
+        h("span", { class: "doing" }, h("span", { class: "led" }), st.text));
+    });
+    return h("a", { class: "bay", href: "#/agents", "aria-label": `The crew: ${CREW.map(([r, n]) => `${n}, ${states[r].text}`).join("; ")}. Open the office.` },
+      h("div", { class: "bay-head" }, h("h2", { text: "The crew" }),
+        h("span", { class: "bay-link" }, icon("eye"), state.live ? "Watch them work live" : "Open the office")),
+      h("ul", { class: "crew-strip" }, ...cells));
+  }
+  function refreshBay() { const bay = $(".bay"); if (bay) bay.replaceWith(crewBay()); }
 
   // ---------- Markdown, safely ----------
   function renderMarkdown(text) {
@@ -500,8 +568,9 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   }
 
   // ---------- state ----------
-  const state = { me: null, jobs: [], routines: [], uploads: [], attached: [], history: [], proposal: null, thinking: false, replyError: "", lastStatuses: {} };
+  const state = { me: null, jobs: [], routines: [], uploads: [], attached: [], history: [], proposal: null, thinking: false, replyError: "", lastStatuses: {}, live: null, demos: null };
   const views = {};
+  let agentsPick = null;  // what the Agents page shows: { kind: "job", id } or { kind: "demo", i }
 
   function toast(message, { link, role = "reviewer" } = {}) {
     const t = h("div", { class: "toast", role: "status" }, face(role), h("div", {}, message, link ? h("div", {}, h("a", { href: link.href, text: link.text })) : null));
@@ -523,6 +592,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     if (state.me.signed_in) {
       if (state.me.user.tz !== tz) api("/api/me", { method: "PATCH", json: { tz } }).catch(() => {});
       await Promise.all([loadJobs(), loadRoutines(), loadUploads()]);
+      await loadLive().catch(() => {});
     }
   }
   async function loadJobs() {
@@ -537,6 +607,12 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     state.jobs = jobs;
   }
   async function loadRoutines() { state.routines = await api("/api/routines"); }
+  async function loadLive() {
+    const running = state.jobs.find((j) => j.status === "running") || state.jobs.find((j) => j.status === "queued");
+    if (!running) { state.live = null; return; }
+    const job = await api(`/api/jobs/${running.id}`);
+    state.live = { id: job.id, title: job.title, status: job.status, events: job.events || [] };
+  }
   async function loadUploads() { state.uploads = await api("/api/uploads"); }
 
   let pollTimer = null;
@@ -547,6 +623,8 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       if (document.visibilityState === "visible" && state.me?.signed_in) {
         const before = JSON.stringify(state.jobs.map((j) => [j.id, j.status, j.unread]));
         await Promise.all([loadJobs(), loadRoutines()]).catch(() => {});
+        await loadLive().catch(() => {});
+        refreshBay();
         if (JSON.stringify(state.jobs.map((j) => [j.id, j.status, j.unread])) !== before) { renderChrome(); refreshView({ soft: true }); }
       }
       schedulePoll();
@@ -554,7 +632,8 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   }
 
   // ---------- chrome: rail and tab bar ----------
-  const NAV = [["today", "Today"], ["inbox", "Inbox"], ["routines", "Routines"], ["files", "Files"], ["settings", "Settings"]];
+  const NAV = [["today", "Today"], ["inbox", "Inbox"], ["agents", "Agents"], ["routines", "Routines"], ["files", "Files"], ["settings", "Settings"]];
+  const TABS = ["today", "inbox", "agents", "routines", "settings"];
   function unreadCount() { return state.jobs.filter((j) => j.unread && ["done", "failed", "skipped"].includes(j.status)).length; }
   function renderChrome() {
     const { page } = route();
@@ -564,11 +643,11 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     const u = state.me.user;
     $("#rail").replaceChildren(
       h("a", { class: "brand", href: "#/today" }, brandMark(), "Relay"),
-      ...NAV.slice(0, 4).map(([k, l]) => link(k, l, "nav-link")),
+      ...NAV.slice(0, 5).map(([k, l]) => link(k, l, "nav-link")),
       h("a", { class: "me", href: "#/settings", "aria-current": page === "settings" ? "page" : null },
         h("span", { class: "avatar" }, u.picture ? h("img", { src: u.picture, alt: "" }) : (u.name || u.email || "?")[0].toUpperCase()),
         h("span", { class: "who" }, h("strong", { text: u.name || "You" }), h("span", { text: state.me.local ? "On this computer" : u.email }))));
-    $("#tabbar").replaceChildren(...NAV.map(([k, l]) => link(k, l, "")));
+    $("#tabbar").replaceChildren(...NAV.filter(([k]) => TABS.includes(k)).map(([k, l]) => link(k, l, "")));
   }
 
   // ---------- Today ----------
@@ -598,18 +677,20 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       return h("button", { type: "button", class: "idea", style: `--c: ${color}`, onclick: () => { box.value = sg.prompt; box.dispatchEvent(new Event("input")); box.focus(); } },
         h("span", { class: "dot" }, icon(name)), sg.label);
     }));
-    const desk = h("section", { class: "desk", "aria-labelledby": "greet" },
-      h("div", { class: "desk-top" }, h("h1", { id: "greet", text: greeting() }),
-        h("span", { class: "date", text: new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) })),
-      conciergeArt(), h("div", {}, form), h("div", { class: "desk-counter", "aria-hidden": "true" }));
-    const page = h("div", {}, desk, ideas, h("div", { id: "reply" }), todayGrid());
+    const desk = h("section", { class: "deck", "aria-labelledby": "greet" },
+      h("div", { class: "deck-main" },
+        h("div", { class: "deck-head" }, h("h1", { id: "greet", text: greeting() }),
+          h("span", { class: "date", text: new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) })),
+        form, ideas, h("div", { id: "reply" })),
+      crewBay());
+    const page = h("div", {}, desk, todayGrid());
     queueMicrotask(() => { renderAttached(); renderReply(); });
     return page;
   };
 
   function todayGrid() {
     const upcoming = state.routines.filter((r) => r.enabled && r.next_run_at).sort((a, b) => new Date(a.next_run_at) - new Date(b.next_run_at)).slice(0, 6);
-    const left = h("section", { "aria-labelledby": "coming" },
+    const left = h("section", { class: "timeline-wrap", "aria-labelledby": "coming" },
       h("div", { class: "section-head" }, h("h2", { id: "coming", text: "Coming up" }), h("a", { href: "#/routines", text: "All routines" })),
       upcoming.length ? h("ol", { class: "timeline" }, ...upcoming.map((r) => {
         const d = new Date(r.next_run_at);
@@ -618,7 +699,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
           h("span", { class: "what" }, h("strong", { text: r.title }), h("span", { text: `${r.schedule_text}, ${until(r.next_run_at)}` })));
       })) : h("p", { class: "muted", text: "Nothing scheduled yet. Ask for something that repeats, like a news briefing every morning, and it will show up here." }));
     const recent = state.jobs.filter((j) => j.status !== "quiet").slice(0, 3);
-    const latest = h("section", { "aria-labelledby": "latest", style: "margin-top: 30px" },
+    const latest = h("section", { class: "latest-wrap", "aria-labelledby": "latest", style: "margin-top: 20px" },
       h("div", { class: "section-head" }, h("h2", { id: "latest", text: "Latest" }), h("a", { href: "#/inbox", text: "Inbox" })),
       recent.length ? h("ul", { class: "list" }, ...recent.map(jobItem)) : h("p", { class: "muted", text: "Finished work lands here and in your Inbox." }));
     return h("div", { class: "today-grid" }, h("div", {}, left, latest), h("div", {}, setupCard()));
@@ -687,7 +768,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   async function sendAsk() {
     const box = $("#ask-text"); const text = box.value.trim();
     if (!text || state.thinking) { if (!text) box.focus(); return; }
-    state.thinking = true; state.replyError = ""; state.proposal = null; renderReply();
+    state.thinking = true; state.replyError = ""; state.proposal = null; renderReply(); refreshBay();
     $("#ask-send").disabled = true;
     try {
       const proposal = await api("/api/ask", { method: "POST", json: { message: text, history: state.history.slice(-6), upload_ids: state.attached.map((f) => f.id) } });
@@ -697,7 +778,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       if (proposal.action !== "question") state.attached = [];
       renderAttached();
     } catch (err) { state.replyError = err.message; }
-    finally { state.thinking = false; renderReply(); const b = $("#ask-send"); if (b) b.disabled = false; if (state.proposal?.action === "question") $("#ask-text").focus(); }
+    finally { state.thinking = false; renderReply(); refreshBay(); const b = $("#ask-send"); if (b) b.disabled = false; if (state.proposal?.action === "question") $("#ask-text").focus(); }
   }
 
   async function confirmPlan(p, btn) {
@@ -707,7 +788,8 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       state.proposal = null; state.history = [];
       if (res.kind === "job") {
         await loadJobs(); schedulePoll();
-        toast("The team is on it. I'll let you know when it's done.", { role: "concierge", link: { href: `#/inbox/${res.job.id}`, text: "Watch them work" } });
+        agentsPick = { kind: "job", id: res.job.id };
+        toast("The team is on it. I'll let you know when it's done.", { role: "concierge", link: { href: "#/agents", text: "Watch them work" } });
       } else {
         await loadRoutines();
         toast(`Set up: ${res.routine.title}, ${res.routine.schedule_text.toLowerCase()}.`, { role: "concierge" });
@@ -836,6 +918,78 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     });
   }
 
+  // ---------- Agents: the office, always one click away ----------
+  // Shows the job running now, otherwise the latest finished job, otherwise example recordings.
+  let agentsSource = null;
+  function agentsChoices() {
+    const live = state.jobs.filter((j) => ["running", "queued"].includes(j.status));
+    const past = state.jobs.filter((j) => ["done", "failed"].includes(j.status) && j.skill !== "reminder").slice(0, 8);
+    return { live, past, demos: state.demos || [] };
+  }
+  views.agents = () => {
+    const { live, past, demos } = agentsChoices();
+    if (!agentsPick) agentsPick = live[0] ? { kind: "job", id: live[0].id } : past[0] ? { kind: "job", id: past[0].id } : demos[0] ? { kind: "demo", i: 0 } : null;
+    const frame = h("iframe", { class: "office-frame", title: "The robots at work", src: "/office" });
+    const ready = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+    const head = h("div", { class: "stage-head", id: "stage-head" });
+    const page = h("div", { class: "agents" },
+      h("aside", { class: "agents-list", id: "agents-list" }, agentsList()),
+      h("section", { class: "agents-stage" }, head, frame,
+        h("p", { class: "muted small", text: "Every robot runs the same AI model with its own job and tools. The lit desk is the one holding the folder; its screen shows what it is doing right now, and the team chat shows the notes they leave each other." })));
+    queueMicrotask(() => { if (agentsPick) showInOffice(agentsPick, frame, ready); else if (!state.demos) loadDemos().then(() => { refreshView(); }); });
+    return page;
+  };
+  function agentsList() {
+    const { live, past, demos } = agentsChoices();
+    const pick = (p) => () => { agentsPick = p; refreshView(); };
+    const isOn = (p) => agentsPick && agentsPick.kind === p.kind && (p.kind === "job" ? agentsPick.id === p.id : agentsPick.i === p.i);
+    const row = (p, title, sub, skill, badge) => h("li", {}, h("button", { class: "pick", "aria-pressed": String(!!isOn(p)), onclick: pick(p) },
+      skillMark(skill), h("span", { style: "min-width:0" }, h("strong", { text: title }), h("span", { class: "snippet", text: sub })), badge || null));
+    const group = (label, items) => items.length ? [h("h3", { class: "list-label", text: label }), h("ul", { class: "list" }, ...items)] : [];
+    return h("div", {},
+      h("div", { class: "section-head" }, h("h2", { text: "Agents" })),
+      ...group("Working now", live.map((j) => row({ kind: "job", id: j.id }, j.title, STATUS_TEXT[j.status], j.skill, h("span", { class: `state ${j.status}`, text: "Live" })))),
+      ...group("Recent jobs", past.map((j) => row({ kind: "job", id: j.id }, j.title, ago(j.finished_at || j.created_at), j.skill))),
+      ...group("Example recordings", demos.map((d, i) => row({ kind: "demo", i }, d.title, d.task, "answer"))),
+      !live.length && !past.length && !demos.length ? h("p", { class: "muted", text: "Loading recordings…" }) : null);
+  }
+  async function loadDemos() { try { state.demos = await api("/api/demo-recordings"); } catch { state.demos = []; } }
+  async function showInOffice(p, frame, ready) {
+    if (agentsSource) { agentsSource.close(); agentsSource = null; }
+    let rec, headText, sub;
+    if (p.kind === "demo") {
+      if (!state.demos) await loadDemos();
+      const d = state.demos[p.i]; if (!d) return;
+      rec = { title: d.title, task: d.task, kind: d.kind, live: false, events: d.events };
+      headText = d.title; sub = "A recorded run from the bug-fixing benchmark";
+    } else {
+      const job = await api(`/api/jobs/${p.id}`).catch(() => null);
+      if (!job) return;
+      const live = ["queued", "running"].includes(job.status);
+      const events = (job.events || []).map((e, i) => (i === 0 && e.type === "run_started" ? { ...e, task: job.instructions || job.title } : e));
+      rec = { title: job.title, task: job.instructions, kind: "assist", live, events };
+      headText = job.title; sub = live ? (job.status === "queued" ? "Next in line" : "Working on it now") : `Finished ${ago(job.finished_at)}`;
+      if (live) {
+        const src = new EventSource(`/api/jobs/${job.id}/events`);
+        agentsSource = src;
+        let n = 0;
+        src.onmessage = (msg) => {
+          if (++n <= events.length) return;
+          let e = JSON.parse(msg.data);
+          if (e.type === "run_started") e = { ...e, task: job.instructions || job.title };
+          if (!frame.isConnected) { src.close(); return; }
+          ready.then(() => frame.contentWindow && frame.contentWindow.postMessage({ type: "event", event: e }, location.origin));
+        };
+        src.addEventListener("end", () => { src.close(); loadJobs().then(() => { renderChrome(); const l = $("#agents-list"); if (l) l.replaceChildren(agentsList()); }); });
+      }
+    }
+    const headEl = $("#stage-head");
+    if (headEl) headEl.replaceChildren(h("div", { style: "min-width:0" }, h("h1", { text: headText }), h("span", { class: "muted", text: sub })),
+      p.kind === "job" ? h("a", { class: "btn", href: `#/inbox/${p.id}` }, icon("inbox"), "Open the result") : null);
+    await ready;
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "load", recording: rec }, location.origin);
+  }
+
   // ---------- Routines ----------
   views.routines = () => {
     const list = state.routines;
@@ -858,7 +1012,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       h("span", { class: "next", text: r.enabled ? (r.next_run_at ? `Next: ${dayLabel(new Date(r.next_run_at))} at ${clock(new Date(r.next_run_at))} (${until(r.next_run_at)})` : "Finished") : "Paused" }),
       r.skill === "reminder" && r.params?.text ? h("p", { style: "margin:0", text: `"${r.params.text}"` }) : (r.instructions ? h("p", { class: "muted small", style: "margin:0", text: clip(r.instructions, 160) }) : null),
       h("div", { class: "actions" },
-        r.skill !== "reminder" ? h("button", { class: "btn", onclick: async () => { const res = await api(`/api/routines/${r.id}/run`, { method: "POST" }); await loadJobs(); schedulePoll(); toast("Running it now.", { role: "concierge", link: { href: `#/inbox/${res.job.id}`, text: "Watch them work" } }); } }, icon("play"), "Run now") : null,
+        r.skill !== "reminder" ? h("button", { class: "btn", onclick: async () => { const res = await api(`/api/routines/${r.id}/run`, { method: "POST" }); await loadJobs(); schedulePoll(); agentsPick = { kind: "job", id: res.job.id }; toast("Running it now.", { role: "concierge", link: { href: "#/agents", text: "Watch them work" } }); } }, icon("play"), "Run now") : null,
         h("button", { class: "btn danger", onclick: async () => { if (!confirm(`Delete "${r.title}"?`)) return; await api(`/api/routines/${r.id}`, { method: "DELETE" }); await loadRoutines(); refreshView(); } }, icon("trash"), "Delete")));
   }
 
@@ -966,53 +1120,59 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     ["research", "Research", "A short report on a topic, with sources you can check."],
     ["weekly_plan", "Weekly plan", "Your goals and your calendar, turned into a realistic week."],
   ];
+  function inviteForm() {
+    const email = h("input", { id: "inv-email", type: "email", autocomplete: "email", required: true, placeholder: "you@gmail.com" });
+    const code = h("input", { id: "inv-code", type: "password", autocomplete: "current-password", required: true, placeholder: "From the person who invited you" });
+    const note = h("p", { class: "muted small", role: "status", style: "margin:0" });
+    const go = h("button", { class: "btn primary", type: "submit", text: "Sign in" });
+    return h("form", { class: "invite", onsubmit: async (e) => {
+      e.preventDefault(); go.disabled = true; note.textContent = "";
+      try { await api("/auth/invite", { method: "POST", json: { email: email.value, code: code.value } }); location.reload(); }
+      catch (err) { note.textContent = err.message; go.disabled = false; }
+    } },
+      h("div", { class: "field" }, h("label", { for: "inv-email", text: "Email" }), email),
+      h("div", { class: "field" }, h("label", { for: "inv-code", text: "Invite code" }), code),
+      h("div", { class: "toolbar" }, go, note));
+  }
   function landing() {
     const params = new URLSearchParams(location.search);
-    const notices = { "not-invited": "This Relay is invite-only. Ask its owner to add your Google account.", cancelled: "Sign-in was cancelled.", unverified: "That Google account's email is not verified." };
+    const notices = { "not-invited": "This Relay is invite-only. Ask its owner for an invite.", cancelled: "Sign-in was cancelled.", unverified: "That Google account's email is not verified." };
     const notice = notices[params.get("signin")];
-    const art = document.createElementNS(NS, "svg"); art.setAttribute("viewBox", "0 0 560 340"); art.setAttribute("class", "hero-art"); art.setAttribute("role", "img"); art.setAttribute("aria-label", "A robot concierge at a front desk, with four robots working at their desks behind it");
-    s("rect", { x: 0, y: 0, width: 560, height: 236, fill: "#1b2630" }, art);              // back wall
-    s("rect", { x: 0, y: 236, width: 560, height: 104, fill: "#161f27" }, art);            // floor
-    s("rect", { x: 22, y: 22, width: 128, height: 92, rx: 4, fill: "#16213a" }, art);      // window
-    for (let i = 0; i < 7; i++) {
-      const hgt = 26 + ((i * 41) % 52);
-      s("rect", { x: 26 + i * 18, y: 114 - hgt, width: 14, height: hgt, fill: "#0f1726" }, art);
-      if (i % 2 === 0) s("rect", { x: 30 + i * 18, y: 120 - hgt, width: 3, height: 4, fill: "#e8c76f" }, art);
-    }
-    s("rect", { x: 22, y: 22, width: 128, height: 92, rx: 4, fill: "none", stroke: "#2b3944", "stroke-width": 7 }, art);
-    const desks = [["planner", 214], ["coder", 300], ["tester", 386], ["reviewer", 472]];
-    for (const [r, x] of desks) {
-      const lit = r === "coder";
-      s("path", { d: `M${x} 0v38`, stroke: "#0f151a", "stroke-width": 2 }, art);
-      s("path", { d: `M${x - 13} 50l7-12h12l7 12Z`, fill: "#2f3d47" }, art);
-      if (lit) s("path", { d: `M${x - 10} 50h20l50 150h-120Z`, fill: "#f2b45a", opacity: 0.2 }, art);
-      robot(art, r, x - 14, 154, { scale: 0.5 });
-      s("rect", { x: x + 4, y: 128, width: 34, height: 26, rx: 3, fill: "#0a1418" }, art);   // monitor
-      s("rect", { x: x + 7, y: 131, width: 28, height: 20, rx: 2, fill: lit ? "#16393b" : "#0e2326" }, art);
-      if (lit) for (let k = 0; k < 4; k++) s("rect", { x: x + 10, y: 134 + k * 4, width: 10 + ((k * 7) % 12), height: 1.6, fill: "#cfe9d8" }, art);
-      s("rect", { x: x - 40, y: 170, width: 82, height: 8, rx: 2, fill: "#5a4636" }, art);  // desk
-      s("rect", { x: x - 34, y: 178, width: 70, height: 26, fill: "#3e3127" }, art);
-    }
-    s("rect", { x: 342, y: 162, width: 24, height: 14, rx: 2, fill: "#d9b46a" }, art);     // the folder on its way
-    robot(art, "concierge", 112, 238, { scale: 1, wave: true, tie: true });
-    s("rect", { x: 10, y: 250, width: 290, height: 16, rx: 3, fill: "#6b5442" }, art);     // front counter
-    s("rect", { x: 22, y: 266, width: 266, height: 64, fill: "#4a3a2e" }, art);
-    s("rect", { x: 112, y: 280, width: 86, height: 24, rx: 4, fill: "#c9b37a" }, art);
-    const plate = s("text", { x: 155, y: 297, "text-anchor": "middle", fill: "#3a2e14", "font-size": 13, "font-weight": 800, "font-family": "Bricolage Grotesque, sans-serif" }, art); plate.textContent = "Concierge";
-    s("path", { d: "M222 250a13 13 0 0 1 26 0", fill: "#f2b45a" }, art);                   // desk bell
-    s("rect", { x: 218, y: 248, width: 34, height: 5, rx: 2, fill: "#f2b45a" }, art);
-    s("circle", { cx: 235, cy: 235, r: 3, fill: "#f2b45a" }, art);
-    s("rect", { x: 160, y: 236, width: 44, height: 14, rx: 2, fill: "#e4ebee", transform: "rotate(-5 182 243)" }, art);
+    // The crew on their platform, each with a technical callout.
+    const art = document.createElementNS(NS, "svg"); art.setAttribute("viewBox", "0 0 560 330"); art.setAttribute("class", "hero-art"); art.setAttribute("role", "img");
+    art.setAttribute("aria-label", "The five robots: Concierge, Planner, Builder, Checker, and Reviewer");
+    for (let x = 0; x <= 560; x += 28) s("line", { x1: x, y1: 0, x2: x, y2: 250, stroke: "#17232c", "stroke-width": 1 }, art);
+    for (let y = 0; y <= 250; y += 28) s("line", { x1: 0, y1: y, x2: 560, y2: y, stroke: "#17232c", "stroke-width": 1 }, art);
+    const pg = s("linearGradient", { id: "hero-deck", x1: 0, y1: 0, x2: 0, y2: 1 }, s("defs", {}, art));
+    s("stop", { offset: 0, "stop-color": "#1a2731" }, pg); s("stop", { offset: 1, "stop-color": "#0b1218" }, pg);
+    s("rect", { x: 0, y: 262, width: 560, height: 68, fill: "url(#hero-deck)" }, art);
+    s("path", { d: "M0 262 H560", stroke: "#33434f", "stroke-width": 2 }, art);
+    const crew = [["concierge", "Concierge", "takes requests", 66, "active"], ["planner", "Planner", "writes the checklist", 172, "done"],
+      ["coder", "Builder", "does the work", 280, "active"], ["tester", "Checker", "verifies every item", 388, "idle"], ["reviewer", "Reviewer", "signs off", 494, "idle"]];
+    crew.forEach(([r, name, job, x, st], i) => {
+      const y = 206;
+      const top = i % 2 ? 26 : 62;
+      s("path", { d: `M${x} ${top + 30} V${y - 82}`, stroke: "#3a4c58", "stroke-width": 1, "stroke-dasharray": "3 3" }, art);
+      s("circle", { cx: x, cy: y - 82, r: 2.5, fill: RelayUnit.ROLE[r].c }, art);
+      const id = s("text", { x, y: top, fill: RelayUnit.ROLE[r].c, "font-size": 11, "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" }, art); id.textContent = RelayUnit.ROLE[r].id;
+      const nm = s("text", { x, y: top + 15, fill: "#edf0ee", "font-size": 13, "font-weight": 700, "text-anchor": "middle", "font-family": "Bricolage Grotesque, sans-serif" }, art); nm.textContent = name;
+      const jb = s("text", { x, y: top + 28, fill: "#8d9faa", "font-size": 10, "text-anchor": "middle", "font-family": "Atkinson Hyperlegible, sans-serif" }, art); jb.textContent = job;
+      if (st === "active") s("ellipse", { cx: x, cy: 272, rx: 44, ry: 8, fill: RelayUnit.ROLE[r].c, opacity: 0.28 }, art);
+      s("rect", { x: x - 28, y: 266, width: 56, height: 5, rx: 2, fill: st === "active" ? RelayUnit.ROLE[r].c : "#26333d" }, art);
+      robot(art, r, x, y, { scale: 0.78, state: st });
+    });
     return h("div", { class: "landing" },
       h("header", { class: "landing-top" }, h("a", { class: "brand", href: "/", style: "padding:0" }, brandMark(), "Relay"),
         h("a", { class: "btn quiet", href: "/demo", text: "Watch the robots work" })),
       h("section", { class: "hero" },
         h("div", {}, notice ? h("p", { class: "notice", text: notice }) : null,
-          h("h1", { text: "A night shift of robots for your errands." }),
+          h("h1", { text: "A crew of AI robots that runs your errands." }),
           h("p", { text: "Tell Relay what you need: the news at 7, a summary of today's email, a file worked through. A small team of AI robots plans it, does it, checks it, and lets you know when it's done." }),
+          state.me.invites ? inviteForm() : null,
           h("div", { class: "cta" },
-            state.me.google ? h("a", { class: "btn primary", href: "/auth/login", text: "Sign in with Google" }) : h("span", { class: "muted", text: "Sign-in is not set up on this server yet." }),
-            h("a", { class: "btn", href: "/demo", text: "See a recorded job" }))),
+            state.me.google ? h("a", { class: state.me.invites ? "btn" : "btn primary", href: "/auth/login", text: "Sign in with Google" })
+              : state.me.invites ? null : h("span", { class: "muted", text: "Sign-in is not set up on this server yet." }),
+            h("a", { class: "btn quiet", href: "/demo", text: "See a recorded job" }))),
         art),
       h("section", { class: "band" }, h("h2", { text: "Things you can hand over" }),
         h("div", { class: "uses" }, ...USES.map(([k, t, d]) => h("article", { class: "use" }, skillMark(k), h("h3", { text: t }), h("p", { text: d }))))),
@@ -1032,8 +1192,13 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   // ---------- render ----------
   function refreshView({ soft = false } = {}) {
     const { page } = route();
+    if (page !== "agents" && agentsSource) { agentsSource.close(); agentsSource = null; }
     if (soft && page === "today") {  // keep whatever is being typed in the ask box
       const grid = $(".today-grid"); if (grid) grid.replaceWith(todayGrid());
+      return;
+    }
+    if (soft && page === "agents") {
+      const l = $("#agents-list"); if (l) l.replaceChildren(agentsList());
       return;
     }
     if (soft && page === "inbox" && route().id) {  // keep the open job (and its office) in place

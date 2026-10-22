@@ -16,6 +16,7 @@ from pathlib import Path
 
 WEB_DIR = Path(__file__).parent
 PAGE = WEB_DIR / "static" / "relay.html"
+UNIT_JS = WEB_DIR / "static" / "unit.js"  # the robots, inlined so the page stays one file
 REPLAYS_DIR = WEB_DIR / "replays"
 DEFAULT_OUT = WEB_DIR.parents[2] / "site" / "index.html"
 
@@ -67,6 +68,7 @@ def render_fragment(live: bool = False, recordings: list[dict] | None = None,
     recs = load_recordings() if recordings is None else recordings
     page = page.replace("/*RECORDINGS*/[]", _script_json(recs), 1)
     page = page.replace("/*EMBED*/false", "true" if embed else "false", 1)
+    page = page.replace("/*UNIT_JS*/", UNIT_JS.read_text(encoding="utf-8").replace("</", "<\\/"), 1)
     return page.replace("/*LIVE*/false", "true" if live else "false", 1)
 
 

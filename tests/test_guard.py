@@ -13,6 +13,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="the guard is us
 def guarded(monkeypatch):
     monkeypatch.setenv("SANDBOX", "guarded")
     monkeypatch.setenv("GROQ_API_KEY", "must-not-leak")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:must-not-leak@db/x")
+    monkeypatch.setenv("INVITES", "a@b.c=must-not-leak")
 
 
 def run_python(root, code):
@@ -49,5 +51,5 @@ def test_dangerous_operations_are_blocked(repo, code, blocked):
 
 
 def test_the_key_is_not_in_the_environment(repo):
-    out = run_python(repo, "import os; print([k for k in os.environ if 'KEY' in k])")
-    assert "[]" in out and "must-not-leak" not in out
+    out = run_python(repo, "import os; print(sorted(os.environ.items()))")
+    assert "must-not-leak" not in out

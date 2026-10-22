@@ -369,3 +369,21 @@ def test_google_sign_in_and_gmail_connection(store, monkeypatch):
     stored = store.connection(store.upsert_user("aitzaz@example.com")["id"], "gmail")["token"]
     assert "r" not in crypto.decrypt(stored)["access_token"] and '"r"' not in stored  # encrypted
     assert client.get("/auth/callback?code=c&state=forged", follow_redirects=False).headers["location"] == "/?signin=cancelled"
+
+
+def test_invite_codes_sign_people_in(store, monkeypatch):
+    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("SANDBOX", raising=False)
+    monkeypatch.delenv("RELAY_GUARD_DENY", raising=False)
+    monkeypatch.setenv("INVITES", "aitzaz@example.com=ABCD-EFGH-JKLM")
+    monkeypatch.setattr("orchestrator.web.app.load_dotenv", lambda: None)
+    client = TestClient(create_app(store=store, start_worker=False, public=True), base_url="https://testserver")
+    assert client.get("/api/me").json()["invites"] is True
+    wrong = client.post("/auth/invite", json={"email": "aitzaz@example.com", "code": "nope"}, headers=HDR)
+    assert wrong.status_code == 401
+    ok = client.post("/auth/invite", json={"email": "Aitzaz@Example.com ", "code": "ABCD-EFGH-JKLM"}, headers=HDR)
+    assert ok.status_code == 200 and client.get("/api/me").json()["signed_in"] is True
+    for _ in range(8):
+        client.post("/auth/invite", json={"email": "x@example.com", "code": "guess-guess"}, headers=HDR)
+    assert client.post("/auth/invite", json={"email": "x@example.com", "code": "guess"}, headers=HDR).status_code == 429
