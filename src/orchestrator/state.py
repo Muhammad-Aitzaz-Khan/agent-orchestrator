@@ -58,6 +58,7 @@ class Plan(BaseModel):
     requirements: list[Requirement] = Field(
         min_length=1, description="Every behaviour the fixed code must have, edge cases included"
     )
+    message: str = Field(default="", description="A note to the Coder (or Builder) who works next: the one thing they most need to know. One or two sentences in plain, friendly English, the way a colleague talks. No code, no requirement IDs.")
 
 
 class ChangeSummary(BaseModel):
@@ -65,6 +66,7 @@ class ChangeSummary(BaseModel):
 
     summary: str = Field(description="What was changed and why")
     files_changed: list[str] = Field(description="Files that were modified")
+    message: str = Field(default="", description="A note to the Tester who checks your work next: what you did and what to look at closely. One or two sentences in plain, friendly English, the way a colleague talks. No code, no requirement IDs.")
 
 
 class RequirementCheck(BaseModel):
@@ -79,6 +81,7 @@ class TestReport(BaseModel):
     __test__ = False  # not a pytest test class
 
     checks: list[RequirementCheck] = Field(min_length=1)
+    message: str = Field(default="", description="A note to the next teammate: if everything passed, tell the Reviewer; if something failed, tell the Coder what broke. One or two sentences in plain, friendly English, the way a colleague talks. No code, no requirement IDs.")
 
     @property
     def all_passed(self) -> bool:
@@ -100,6 +103,7 @@ class Review(BaseModel):
 
     verdict: Literal["approve", "revise"]
     issues: list[ReviewIssue] = Field(default_factory=list)
+    message: str = Field(default="", description="If you approve, a note to the person who asked for the work; if you send it back, a note to the Coder about what to change. One or two sentences in plain, friendly English, the way a colleague talks. No code, no requirement IDs.")
 
 
 # ---------- the orchestrated run ----------

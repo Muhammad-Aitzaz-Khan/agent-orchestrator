@@ -1,0 +1,1130 @@
+<title>Relay</title>
+<meta name="description" content="Ask a team of four AI robots to do anything, and watch them plan, make, check, and review it together.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a night-shift office. The office scene is the page's one bold element;
+   lamps switch on over whichever robot is working. Everything around it stays quiet. */
+:root {
+  --night: #141c23;      /* page ground: deep blue slate */
+  --wall: #1c2730;
+  --floor: #161f27;
+  --panel: #1f2b35;
+  --panel-2: #26343f;
+  --line: #34444f;
+  --ink: #ece6d9;        /* warm paper white */
+  --muted: #a7b0b6;
+  --dim: #77848d;
+  --lamp: #f2b45a;       /* tungsten desk light */
+  --screen: #0e2326;
+  --phosphor: #cfe9d8;
+  --planner: #5d84c9;    /* enamel paint, like tin toys */
+  --coder: #d8a23a;
+  --tester: #5fa88a;
+  --reviewer: #c8655f;
+  --good: #6cc28f;
+  --bad: #e2766b;
+  --chart-single: #6789c9;
+  --chart-team: #bd8626;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--night); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.5;
+  font-variation-settings: "wdth" 100;
+}
+a { color: var(--ink); }
+:focus-visible { outline: 3px solid var(--lamp); outline-offset: 3px; border-radius: 4px; }
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* ---------- top bar ---------- */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--night) 92%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.topbar .wrap { display: flex; align-items: center; gap: 24px; padding-block: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--display); font-weight: 800; font-size: 1.35rem; font-variation-settings: "wdth" 125; letter-spacing: 0.01em; }
+.brand svg { width: 34px; height: 24px; }
+.nav { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+.nav a { text-decoration: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; font-size: 0.95rem; }
+.nav a:hover { color: var(--ink); background: var(--panel); }
+.nav a.repo { color: var(--ink); border: 1px solid var(--line); }
+
+/* ---------- intro + run picker ---------- */
+.intro { padding-block: 22px 14px; display: grid; gap: 14px; }
+.intro h1 { margin: 0; font-family: var(--display); font-variation-settings: "wdth" 118; font-weight: 800; font-size: clamp(1.6rem, 3.4vw, 2.4rem); line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); max-width: 75ch; font-size: 1rem; }
+.picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.job { text-align: left; cursor: pointer; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; display: grid; gap: 2px; min-width: 0; align-content: start; }
+.job:hover { border-color: var(--dim); }
+.job[aria-pressed="true"] { border-color: var(--lamp); box-shadow: inset 0 0 0 1px var(--lamp); }
+.job-title { font-weight: 700; }
+.job-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-meta { color: var(--muted); font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job.new { border-style: dashed; }
+
+/* ---------- the ask box ---------- */
+.ask { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.ask:focus-within { border-color: var(--lamp); }
+.ask textarea { width: 100%; min-height: 52px; resize: none; background: transparent; color: var(--ink); border: 0; padding: 8px 6px; font: inherit; font-size: 1.08rem; outline: none; }
+.ask textarea::placeholder { color: var(--dim); }
+.ask .btn { padding: 12px 26px; font-size: 1.02rem; }
+.ideas { gap: 8px; }
+.past { display: grid; gap: 8px; margin-top: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chip { cursor: pointer; background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 0.88rem; color: var(--muted); }
+.chip:hover, .chip[aria-pressed="true"] { color: var(--ink); border-color: var(--dim); }
+.btn { cursor: pointer; border-radius: 8px; padding: 10px 18px; font-weight: 700; border: 1px solid var(--line); background: var(--panel-2); }
+.btn.primary { background: var(--lamp); color: #2a1d08; border-color: var(--lamp); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.note { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.note.error { color: var(--bad); }
+
+/* ---------- the office ---------- */
+.stage-wrap { scroll-margin-top: 76px; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: linear-gradient(var(--wall) 0 67.4%, var(--floor) 67.4%); }
+.stage { display: block; width: 100%; height: auto; max-height: max(420px, calc(100svh - 340px)); }
+.badge-live { position: absolute; top: 12px; left: 12px; background: var(--bad); color: #fff; font-weight: 700; font-size: 0.8rem; padding: 2px 10px; border-radius: 999px; }
+.stage text { font-family: var(--body); }
+.stage .mono { font-family: var(--mono); }
+.cone { transition: opacity 500ms ease; }
+.lamp-bulb { transition: fill 400ms ease; }
+.folder { transition: transform 900ms cubic-bezier(.5,.05,.3,1); }
+.robot .arm { transform-box: fill-box; transform-origin: 50% 0%; }
+.robot.active .arm.left { animation: type 0.32s ease-in-out infinite alternate; }
+.robot.active .arm.right { animation: type 0.32s ease-in-out infinite alternate-reverse; }
+@keyframes type { from { transform: rotate(-7deg); } to { transform: rotate(5deg); } }
+.robot .bulb { transition: fill 300ms ease; }
+.robot.active .bulb { animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 50% { opacity: 0.55; } }
+.robot .eyes-open, .robot .eyes-shut, .robot .eyes-happy { transition: opacity 200ms; }
+.robot.active .eyes-open { animation: blink 3.6s infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.bubble { transition: opacity 250ms ease; }
+.screen-text { transition: opacity 200ms ease; }
+.stage.no-anim * { transition: none !important; }
+
+/* ---------- player ---------- */
+.player { display: flex; align-items: center; gap: 12px; padding: 10px 2px; flex-wrap: wrap; }
+.icon-btn { cursor: pointer; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; }
+.icon-btn.play { background: var(--lamp); border-color: var(--lamp); color: #2a1d08; }
+.icon-btn svg { width: 18px; height: 18px; }
+.track { flex: 1 1 260px; position: relative; height: 34px; cursor: pointer; min-width: 0; }
+.track-bar { position: absolute; left: 0; right: 0; top: 13px; height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.track-seg { position: absolute; top: 0; bottom: 0; opacity: 0.85; }
+.track-head { position: absolute; top: 6px; width: 4px; height: 22px; border-radius: 2px; background: var(--ink); transform: translateX(-2px); }
+.time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.9rem; min-width: 92px; text-align: right; }
+.speed { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.speed button { cursor: pointer; background: transparent; border: 0; padding: 6px 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.speed button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); }
+
+/* ---------- panels under the office ---------- */
+.panels { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; padding-block: 8px 24px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.panel h2 { margin: 0 0 10px; font-size: 1.05rem; font-family: var(--display); font-variation-settings: "wdth" 110; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { cursor: pointer; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 0.85rem; color: var(--muted); }
+.tab[aria-selected="true"] { color: var(--ink); border-color: var(--c, var(--dim)); box-shadow: inset 0 -2px 0 var(--c, var(--dim)); }
+.big-screen { background: var(--screen); border-radius: 8px; padding: 14px 16px; min-height: 260px; max-height: 340px; overflow: auto; font-family: var(--mono); font-size: 0.86rem; color: var(--phosphor); white-space: pre-wrap; overflow-wrap: anywhere; border: 6px solid #0a1518; }
+.big-screen .scr-title { color: var(--muted); margin-bottom: 8px; display: block; }
+.tone-good { color: var(--good); } .tone-bad { color: var(--bad); } .tone-dim { color: var(--dim); }
+.tone-add { color: var(--good); } .tone-del { color: var(--bad); }
+.feed { list-style: none; margin: 0; padding: 0 4px 0 0; display: grid; gap: 10px; max-height: 380px; overflow: auto; align-content: start; }
+.feed li { font-size: 0.94rem; min-width: 0; }
+.feed .msg { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: start; }
+.feed .face { width: 34px; height: 36px; }
+.bubble-msg { background: var(--panel-2); border-radius: 4px 12px 12px 12px; padding: 8px 12px; border-left: 3px solid var(--c); display: grid; gap: 2px; overflow-wrap: anywhere; }
+.from { font-size: 0.8rem; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.from strong { color: var(--ink); }
+.badge { font-size: 0.72rem; font-weight: 700; padding: 0 8px; border-radius: 999px; }
+.badge.ok { background: #2c4a3a; color: var(--good); } .badge.no { background: #4a2c2c; color: var(--bad); }
+.feed .you { display: flex; justify-content: flex-end; }
+.bubble-you { background: #3a3222; border-radius: 12px 4px 12px 12px; padding: 8px 12px; max-width: 88%; display: grid; gap: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feed .acts { color: var(--dim); font-size: 0.84rem; padding-left: 42px; }
+.feed .sys { text-align: center; font-size: 0.86rem; color: var(--muted); }
+.feed .sys.tone-good { color: var(--good); } .feed .sys.tone-bad { color: var(--bad); }
+
+.outcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; padding-block: 0 40px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 420px; overflow: auto; }
+.checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; font-size: 0.9rem; }
+.mark { width: 18px; height: 18px; border-radius: 4px; border: 2px solid var(--line); margin-top: 2px; display: grid; place-items: center; font-size: 0.7rem; font-weight: 800; color: var(--night); }
+.checks li[data-s="pass"] .mark { background: var(--good); border-color: var(--good); }
+.checks li[data-s="fail"] .mark { background: var(--bad); border-color: var(--bad); }
+.checks .rid { font-weight: 700; margin-right: 4px; }
+.checks .ev { display: block; color: var(--dim); font-size: 0.82rem; font-family: var(--mono); overflow-wrap: anywhere; }
+.code-view { background: var(--screen); border-radius: 8px; padding: 12px 14px; max-height: 420px; overflow: auto; font-family: var(--mono); font-size: 0.82rem; white-space: pre; color: var(--phosphor); }
+.code-view.prose { white-space: pre-wrap; font-family: var(--body); font-size: 0.95rem; color: var(--ink); background: var(--night); }
+.summary-strip { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; color: var(--muted); font-size: 0.9rem; }
+.summary-strip strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---------- sections ---------- */
+section.band { border-top: 1px solid var(--line); padding-block: 48px; }
+section.band h2.title { margin: 0 0 8px; font-family: var(--display); font-variation-settings: "wdth" 118; font-weight: 800; font-size: clamp(1.5rem, 3vw, 2.1rem); line-height: 1.1; text-wrap: balance; }
+section.band .lede { margin: 0 0 28px; color: var(--muted); max-width: 65ch; }
+.crew { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.member { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.member svg { width: 92px; height: 92px; }
+.member h3 { margin: 0; font-size: 1.15rem; font-family: var(--display); font-variation-settings: "wdth" 115; }
+.member p { margin: 0; color: var(--muted); font-size: 0.93rem; }
+.member dl { margin: 4px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 0.85rem; }
+.member dt { color: var(--dim); } .member dd { margin: 0; }
+.flow { margin-top: 20px; color: var(--muted); max-width: 70ch; }
+
+.results-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.chart-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.chart-card h3 { margin: 0 0 4px; font-size: 1rem; }
+.chart-card .sub { margin: 0 0 12px; color: var(--muted); font-size: 0.88rem; }
+.legend { display: flex; gap: 16px; font-size: 0.88rem; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .tip { position: absolute; pointer-events: none; background: var(--night); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; white-space: nowrap; }
+.findings { display: grid; gap: 14px; }
+.finding { border-left: 3px solid var(--line); padding-left: 14px; }
+.finding h3 { margin: 0 0 4px; font-size: 1rem; }
+.finding p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+.tokens { margin-top: 14px; display: grid; gap: 6px; }
+.tok-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 80px; gap: 10px; align-items: center; font-size: 0.88rem; }
+.tok-bar { height: 12px; border-radius: 0 4px 4px 0; background: var(--c); }
+.tok-row .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+table.data { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-top: 12px; }
+table.data th, table.data td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+details.table-view summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
+
+.steps { display: grid; gap: 14px; max-width: 760px; }
+.cmd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; background: var(--screen); border-radius: 8px; padding: 10px 12px; }
+.cmd code { font-family: var(--mono); font-size: 0.86rem; color: var(--phosphor); white-space: pre-wrap; overflow-wrap: anywhere; }
+.copy { cursor: pointer; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; font-size: 0.8rem; }
+.steps h3 { margin: 0 0 6px; font-size: 1rem; }
+footer { border-top: 1px solid var(--line); padding-block: 24px 40px; color: var(--dim); font-size: 0.88rem; }
+
+@media (max-width: 900px) {
+  .panels, .outcome, .results-grid { grid-template-columns: minmax(0, 1fr); }
+  .panels > .panel:last-child { order: -1; }
+  .stage-wrap { scroll-margin-top: 12px; }
+  .crew { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .topbar { position: static; }
+  .topbar .wrap { gap: 8px; }
+  .nav { margin-left: 0; flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; }
+  .nav a { white-space: nowrap; padding: 6px 10px; }
+  .picker { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+  .picker .job { flex: 0 0 78%; scroll-snap-align: start; }
+}
+@media (max-width: 520px) {
+  .crew { grid-template-columns: minmax(0, 1fr); }
+  .time { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="#office" aria-label="Relay">
+      <svg viewBox="0 0 34 24" aria-hidden="true"><rect x="1" y="9" width="32" height="6" rx="3" fill="#34444f"/><rect x="1" y="9" width="8" height="6" rx="3" fill="#5d84c9"/><rect x="9" y="9" width="8" height="6" fill="#d8a23a"/><rect x="17" y="9" width="8" height="6" fill="#5fa88a"/><rect x="25" y="9" width="8" height="6" rx="3" fill="#c8655f"/><circle cx="17" cy="12" r="5" fill="#ece6d9"/></svg>
+      Relay
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#office">The office</a>
+      <a href="#crew">The crew</a>
+      <a href="#results">Results</a>
+      <a href="#run">Run it yourself</a>
+      <a class="repo" href="https://github.com/Muhammad-Aitzaz-Khan/agent-orchestrator">Source code</a>
+    </nav>
+  </div>
+</header>
+
+<main id="office">
+  <div class="wrap intro">
+    <h1>Ask a team of four robots to do anything.</h1>
+    <p>Write what you need: a study plan, a speech, a web page, a story. One robot plans it, one makes it, one checks it, and one reviews it, and you can watch them work it out together.</p>
+    <form class="ask" id="ask">
+      <label class="sr-only" for="ask-text">What do you want the team to do?</label>
+      <textarea id="ask-text" rows="2" maxlength="8000" placeholder="What do you want the team to do?"></textarea>
+      <button class="btn primary" id="ask-go" type="submit">Start</button>
+    </form>
+    <div class="row ideas" id="ideas"></div>
+    <p class="note" id="ask-note" role="status"></p>
+    <div class="past">
+      <span class="note">Or watch a job they already did:</span>
+      <div class="picker" id="picker" role="group" aria-label="Recorded jobs"></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="stage-wrap">
+      <svg class="stage" id="stage" viewBox="0 0 1200 620" role="img" aria-label="An office with four robots at desks"></svg>
+      <span class="badge-live" id="live-badge" hidden>Live</span>
+    </div>
+
+    <div class="player" aria-label="Playback">
+      <button class="icon-btn play" id="play" aria-label="Pause"></button>
+      <button class="icon-btn" id="restart" aria-label="Restart"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 0 2-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 2v5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="track" id="track" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="track-bar" id="track-bar"></div>
+        <div class="track-head" id="track-head"></div>
+      </div>
+      <span class="time" id="time">0:00 / 0:00</span>
+      <div class="speed" role="group" aria-label="Speed">
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="2" aria-pressed="false">2×</button>
+        <button data-speed="4" aria-pressed="false">4×</button>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Over the shoulder</h2>
+          <div class="tabs" id="screen-tabs" role="tablist" aria-label="Whose screen"></div>
+        </div>
+        <div class="big-screen" id="big-screen" aria-live="polite"></div>
+      </div>
+      <div class="panel">
+        <h2>Team chat</h2>
+        <ol class="feed" id="feed" aria-live="polite"></ol>
+      </div>
+    </div>
+
+    <div class="outcome">
+      <div class="panel">
+        <div class="panel-head"><h2>Task board</h2><span class="note" id="board-count"></span></div>
+        <ol class="checks" id="checks"></ol>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>The result</h2><div class="tabs" id="result-tabs" role="tablist" aria-label="Result view"></div></div>
+        <div class="code-view" id="result-view">The result appears here when the team finishes.</div>
+        <div class="row" id="result-actions" style="margin-top:10px" hidden><button class="copy" id="copy-result" type="button">Copy</button><button class="copy" id="download-result" type="button">Download</button></div>
+        <div class="summary-strip" id="summary"></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="band" id="crew">
+    <div class="wrap">
+      <h2 class="title">The crew</h2>
+      <p class="lede">Every robot runs the same AI model, but each gets its own job description and its own set of tools. Only the Builder can change files. For bug-fixing jobs, the Builder is called the Coder and the Checker is called the Tester.</p>
+      <div class="crew" id="crew-grid"></div>
+      <p class="flow">A job moves from left to right, and each robot leaves a short note for the next one. If the project has its own tests, they run after the Builder with no AI involved. If they fail, if the Checker finds a broken item, or if the Reviewer finds a real problem, the folder goes back to the Builder with notes, up to three rounds in total.</p>
+    </div>
+  </section>
+
+  <section class="band" id="results">
+    <div class="wrap">
+      <h2 class="title">Does a team beat one robot?</h2>
+      <p class="lede">15 bug-fixing tasks with hidden tests, 3 runs each, the same model (gpt-oss-120b) for both. A run passes only if the project's visible and hidden tests pass afterwards.</p>
+      <div class="results-grid">
+        <div class="chart-card">
+          <h3>Runs passed, by difficulty</h3>
+          <p class="sub">API errors are left out: one run in each mode.</p>
+          <div class="legend"><span style="--c: var(--chart-single)">One robot</span><span style="--c: var(--chart-team)">Team of four</span></div>
+          <div class="chart" id="pass-chart" style="position: relative"></div>
+          <details class="table-view"><summary>Show as a table</summary>
+            <table class="data"><thead><tr><th>Difficulty</th><th>One robot</th><th>Team of four</th></tr></thead>
+              <tbody><tr><td>Easy</td><td>12 of 12</td><td>12 of 12</td></tr><tr><td>Medium</td><td>15 of 15</td><td>15 of 15</td></tr><tr><td>Hard</td><td>14 of 17</td><td>17 of 17</td></tr><tr><td>All</td><td>41 of 44</td><td>44 of 44</td></tr></tbody></table>
+          </details>
+          <h3 style="margin-top: 22px">Where the team's tokens went</h3>
+          <p class="sub">Average per task: 47,932 tokens for the team, 11,459 for one robot.</p>
+          <div class="tokens" id="token-bars"></div>
+        </div>
+        <div class="findings">
+          <div class="finding"><h3>The whole difference is one task</h3><p>The two modes tied on 14 of 15 tasks. On the dynamic programming task, one robot fixed the bugs the tests exposed and stopped, in all three runs. A rule written only in the code's documentation (return -1 when an amount cannot be made) was never applied.</p></div>
+          <div class="finding"><h3>Planning made the difference</h3><p>The Planner read that rule and wrote it down as a requirement. Once it was on the task board, the Coder handled it every time.</p></div>
+          <div class="finding"><h3>The checking loop never fired</h3><p>Every team run finished in the first round. The Tester never reported a failure and the Reviewer approved every fix, so on these tasks checking added cost but changed no outcome.</p></div>
+          <div class="finding"><h3>The Tester often ran out of time</h3><p>It used the most tokens of any robot and failed to hand in its report in 64% of runs, because it checked items one at a time. It now checks several per step; a new run will show whether that worked.</p></div>
+          <div class="finding"><h3>About four times the cost</h3><p>The team used 4.2 times the tokens and 2.6 times the time of one robot.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="run">
+    <div class="wrap">
+      <h2 class="title">Run it yourself</h2>
+      <p class="lede">For developers: Relay runs on your own computer with your own AI key. You need Python 3.11 or newer and a key for any OpenAI-compatible provider (Groq has a free tier).</p>
+      <div class="steps">
+        <div><h3>Get the code</h3><div class="cmd"><code>git clone https://github.com/Muhammad-Aitzaz-Khan/agent-orchestrator.git
+cd agent-orchestrator
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev]"</code><button class="copy">Copy</button></div></div>
+        <div><h3>Add your key</h3><div class="cmd"><code>copy .env.example .env
+python -m orchestrator.doctor</code><button class="copy">Copy</button></div><p class="note">Put the key in .env. The doctor checks that the model can call tools.</p></div>
+        <div><h3>Open the office</h3><div class="cmd"><code>python -m orchestrator.web</code><button class="copy">Copy</button></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Relay is part of Agent Orchestrator by Muhammad Aitzaz Khan. The recordings are real runs; file paths that identify a person were removed.</div></footer>
+
+<script>
+window.RELAY_RECORDINGS = /*RECORDINGS*/[];
+window.RELAY_LIVE = /*LIVE*/false;
+</script>
+<script>
+"use strict";
+(() => {
+  const ROLES = ["planner", "coder", "tester", "reviewer"];
+  const COLORS = { planner: "#5d84c9", coder: "#d8a23a", tester: "#5fa88a", reviewer: "#c8655f" };
+  const DARK = { planner: "#3d5d96", coder: "#a87a22", tester: "#3f7c63", reviewer: "#94463f" };
+  const JOBS = {
+    planner: "Reads your request and writes a checklist of everything the result must get right.",
+    coder: "Makes the thing (the writing, the web page, or the code) until every item on the checklist holds.",
+    tester: "Checks each item, by running code or counting words, and writes down what it found.",
+    reviewer: "Reads the finished work, then approves it or sends it back with notes.",
+  };
+  const CREW_NAMES = { planner: "Planner", coder: "Builder (Coder)", tester: "Checker (Tester)", reviewer: "Reviewer" };
+  const TOOLS = {
+    planner: ["no", "tests only", "8"], coder: ["yes", "tests only", "15"], tester: ["no", "yes, in a copy", "10"], reviewer: ["no", "tests only", "6"],
+  };
+  const STATION_X = { planner: 150, coder: 450, tester: 750, reviewer: 1050 };
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let titles = { planner: "Planner", coder: "Coder", tester: "Tester", reviewer: "Reviewer" };
+
+  // ---------- small helpers ----------
+  function svg(tag, attrs = {}, parent) {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (parent) parent.append(node);
+    return node;
+  }
+  function el(tag, attrs = {}, ...kids) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "text") node.textContent = v; else if (k === "class") node.className = v; else node.setAttribute(k, v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+    return node;
+  }
+  const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const args = (raw) => { try { return JSON.parse(raw || "{}"); } catch { return {}; } };
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const lines = (text) => String(text || "").replace(/\r/g, "").split("\n");
+  // seeded random so the city looks the same on every load
+  let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+
+  // ---------- robots (also used for the crew cards) ----------
+  function drawRobot(parent, role, x, y, scale = 1) {
+    const g = svg("g", { class: "robot", transform: `translate(${x} ${y}) scale(${scale})` }, parent);
+    const c = COLORS[role], d = DARK[role];
+    svg("rect", { x: -3, y: -66, width: 6, height: 18, fill: d }, g);                     // antenna
+    const bulb = svg("circle", { class: "bulb", cx: 0, cy: -70, r: 6, fill: "#3a464f" }, g);
+    svg("rect", { x: -36, y: -50, width: 72, height: 54, rx: 12, fill: c }, g);            // head
+    svg("rect", { x: -27, y: -41, width: 54, height: 34, rx: 7, fill: "#13202a" }, g);     // face screen
+    const open = svg("g", { class: "eyes-open" }, g);
+    svg("rect", { x: -17, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, open);
+    svg("rect", { x: 8, y: -32, width: 9, height: 13, rx: 3, fill: "#cfe9d8" }, open);
+    const shut = svg("g", { class: "eyes-shut" }, g);
+    svg("rect", { x: -18, y: -25, width: 11, height: 3, rx: 1.5, fill: "#5f6e78" }, shut);
+    svg("rect", { x: 7, y: -25, width: 11, height: 3, rx: 1.5, fill: "#5f6e78" }, shut);
+    const happy = svg("g", { class: "eyes-happy" }, g);
+    svg("path", { d: "M-18 -22 q5.5 -9 11 0 M7 -22 q5.5 -9 11 0", fill: "none", stroke: "#6cc28f", "stroke-width": 3, "stroke-linecap": "round" }, happy);
+    svg("rect", { x: -10, y: 4, width: 20, height: 8, fill: d }, g);                       // neck
+    svg("rect", { x: -40, y: 10, width: 80, height: 62, rx: 14, fill: c }, g);             // body
+    svg("rect", { x: -24, y: 24, width: 48, height: 22, rx: 5, fill: d }, g);              // chest panel
+    svg("circle", { cx: -12, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.85 }, g);
+    svg("circle", { cx: 2, cy: 35, r: 4, fill: "#ece6d9", opacity: 0.5 }, g);
+    svg("rect", { x: 10, y: 31, width: 9, height: 8, rx: 2, fill: "#ece6d9", opacity: 0.35 }, g);
+    const left = svg("rect", { class: "arm left", x: -53, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
+    const right = svg("rect", { class: "arm right", x: 41, y: 16, width: 12, height: 58, rx: 6, fill: d }, g);
+    return { g, bulb, open, shut, happy, left, right };
+  }
+  function setRobot(r, state, role) {
+    r.g.classList.toggle("active", state === "active");
+    r.bulb.setAttribute("fill", state === "active" ? COLORS[role] : state === "done" ? "#6cc28f" : "#3a464f");
+    r.open.style.opacity = state === "active" ? 1 : 0;
+    r.shut.style.opacity = state === "idle" ? 1 : 0;
+    r.happy.style.opacity = state === "done" ? 1 : 0;
+  }
+
+  // ---------- the office scene ----------
+  const scene = {};
+  function buildScene() {
+    const s = $("stage");
+    const defs = svg("defs", {}, s);
+    const cone = svg("linearGradient", { id: "cone", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    svg("stop", { offset: "0", "stop-color": "#f2b45a", "stop-opacity": 0.55 }, cone);
+    svg("stop", { offset: "1", "stop-color": "#f2b45a", "stop-opacity": 0.03 }, cone);
+    const sky = svg("linearGradient", { id: "sky", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+    svg("stop", { offset: "0", "stop-color": "#0d1830" }, sky);
+    svg("stop", { offset: "1", "stop-color": "#28324a" }, sky);
+    const pool = svg("radialGradient", { id: "pool" }, defs);
+    svg("stop", { offset: "0", "stop-color": "#f2b45a", "stop-opacity": 0.28 }, pool);
+    svg("stop", { offset: "1", "stop-color": "#f2b45a", "stop-opacity": 0 }, pool);
+
+    svg("rect", { x: 0, y: 0, width: 1200, height: 620, fill: "#1c2730" }, s);           // wall
+    svg("rect", { x: 0, y: 0, width: 1200, height: 14, fill: "#141c23" }, s);            // ceiling strip
+    svg("rect", { x: 0, y: 418, width: 1200, height: 202, fill: "#161f27" }, s);         // floor
+    for (let i = 0; i < 9; i++) svg("line", { x1: 0, y1: 430 + i * 22, x2: 1200, y2: 430 + i * 22, stroke: "#1b252e", "stroke-width": 2 }, s);
+    svg("rect", { x: 0, y: 410, width: 1200, height: 10, fill: "#121a20" }, s);          // skirting
+
+    for (const role of ROLES) svg("line", { x1: STATION_X[role], y1: 14, x2: STATION_X[role], y2: 236, stroke: "#0f151a", "stroke-width": 2 }, s);
+
+    // window with the city at night
+    svg("rect", { x: 34, y: 40, width: 286, height: 196, rx: 4, fill: "url(#sky)" }, s);
+    for (let i = 0; i < 16; i++) {
+      const w = 14 + rnd() * 22, h = 50 + rnd() * 110, bx = 34 + i * 18 - 6;
+      svg("rect", { x: bx, y: 236 - h, width: w, height: h, fill: "#111a28" }, s);
+      for (let k = 0; k < 6; k++) if (rnd() > 0.55) svg("rect", { x: bx + 3 + (k % 2) * 7, y: 236 - h + 8 + Math.floor(k / 2) * 14, width: 3, height: 4, fill: "#e8c76f", opacity: 0.8 }, s);
+    }
+    svg("rect", { x: 34, y: 40, width: 286, height: 196, rx: 4, fill: "none", stroke: "#2b3944", "stroke-width": 10 }, s);
+    svg("line", { x1: 177, y1: 40, x2: 177, y2: 236, stroke: "#2b3944", "stroke-width": 6 }, s);
+
+    // task board
+    svg("rect", { x: 418, y: 34, width: 364, height: 184, rx: 6, fill: "#d9d3c4" }, s);
+    svg("rect", { x: 418, y: 34, width: 364, height: 184, rx: 6, fill: "none", stroke: "#8b8476", "stroke-width": 6 }, s);
+    svg("text", { x: 436, y: 62, fill: "#3b3a36", "font-size": 17, "font-weight": 800 }, s).textContent = "Task board";
+    scene.boardCount = svg("text", { x: 764, y: 62, fill: "#5e5b54", "font-size": 13, "text-anchor": "end" }, s);
+    scene.notes = svg("g", {}, s);
+    scene.boardEmpty = svg("text", { x: 600, y: 140, fill: "#7d786d", "font-size": 14, "text-anchor": "middle" }, s);
+    scene.boardEmpty.textContent = "Waiting for the Planner's checklist";
+
+    // test light and clock
+    svg("rect", { x: 832, y: 70, width: 56, height: 92, rx: 8, fill: "#26343f" }, s);
+    scene.testLight = svg("circle", { cx: 860, cy: 104, r: 16, fill: "#3a464f" }, s);
+    svg("text", { x: 860, y: 148, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s).textContent = "Tests";
+    svg("circle", { cx: 1010, cy: 116, r: 46, fill: "#ece6d9" }, s);
+    svg("circle", { cx: 1010, cy: 116, r: 46, fill: "none", stroke: "#2b3944", "stroke-width": 6 }, s);
+    for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; svg("line", { x1: 1010 + Math.sin(a) * 36, y1: 116 - Math.cos(a) * 36, x2: 1010 + Math.sin(a) * 41, y2: 116 - Math.cos(a) * 41, stroke: "#3b3a36", "stroke-width": 2 }, s); }
+    scene.hourHand = svg("line", { x1: 1010, y1: 116, x2: 1010, y2: 92, stroke: "#3b3a36", "stroke-width": 4, "stroke-linecap": "round" }, s);
+    scene.minHand = svg("line", { x1: 1010, y1: 116, x2: 1010, y2: 80, stroke: "#c8655f", "stroke-width": 3, "stroke-linecap": "round" }, s);
+    svg("circle", { cx: 1010, cy: 116, r: 4, fill: "#3b3a36" }, s);
+    scene.clockLabel = svg("text", { x: 1010, y: 186, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s);
+
+    scene.stations = {};
+    for (const role of ROLES) {
+      const cx = STATION_X[role];
+      const st = {};
+      // pendant lamp: cord, shade, light cone
+      st.cone = svg("path", { class: "cone", d: `M${cx - 30} 262 L${cx + 30} 262 L${cx + 150} 560 L${cx - 150} 560 Z`, fill: "url(#cone)", opacity: 0 }, s);
+      st.pool = svg("ellipse", { class: "cone", cx: cx, cy: 560, rx: 160, ry: 26, fill: "url(#pool)", opacity: 0 }, s);
+      svg("path", { d: `M${cx - 34} 262 L${cx - 18} 236 L${cx + 18} 236 L${cx + 34} 262 Z`, fill: "#2f3d47" }, s);
+      st.bulb = svg("ellipse", { class: "lamp-bulb", cx: cx, cy: 262, rx: 22, ry: 5, fill: "#3a464f" }, s);
+      // floor shadow, chair, robot
+      svg("ellipse", { cx: cx, cy: 566, rx: 150, ry: 14, fill: "#10171d" }, s);
+      svg("rect", { x: cx - 128, y: 396, width: 86, height: 100, rx: 10, fill: "#2a3640" }, s);
+      st.robot = drawRobot(s, role, cx - 86, 386);
+      // desk
+      svg("rect", { x: cx - 140, y: 470, width: 280, height: 14, rx: 3, fill: "#5a4636" }, s);
+      svg("rect", { x: cx - 128, y: 484, width: 256, height: 70, fill: "#3e3127" }, s);
+      svg("rect", { x: cx - 60, y: 498, width: 120, height: 32, rx: 4, fill: "#c9b37a" }, s);       // name plate
+      st.name = svg("text", { x: cx, y: 520, fill: "#3a2e14", "font-size": 17, "font-weight": 800, "text-anchor": "middle" }, s);
+      st.name.textContent = titles[role];
+      st.status = svg("text", { x: cx, y: 586, fill: "#a7b0b6", "font-size": 13, "text-anchor": "middle" }, s);
+      // keyboard
+      svg("rect", { x: cx - 126, y: 463, width: 80, height: 7, rx: 2, fill: "#24303a" }, s);
+      // monitor
+      svg("rect", { x: cx + 54, y: 446, width: 14, height: 24, fill: "#24303a" }, s);
+      svg("rect", { x: cx + 30, y: 466, width: 62, height: 6, rx: 2, fill: "#24303a" }, s);
+      svg("rect", { x: cx - 32, y: 304, width: 186, height: 146, rx: 8, fill: "#0a1418" }, s);
+      st.screenBg = svg("rect", { x: cx - 24, y: 312, width: 170, height: 130, rx: 3, fill: "#0e2326" }, s);
+      st.screenTitle = svg("text", { x: cx - 18, y: 328, fill: COLORS[role], "font-size": 10, class: "mono" }, s);
+      st.screenLines = [];
+      for (let i = 0; i < 8; i++) st.screenLines.push(svg("text", { class: "mono screen-text", x: cx - 18, y: 344 + i * 12.5, fill: "#cfe9d8", "font-size": 9.5 }, s));
+      st.doneSticker = svg("g", { opacity: 0 }, s);
+      svg("circle", { cx: cx + 140, cy: 312, r: 14, fill: "#6cc28f" }, st.doneSticker);
+      svg("path", { d: `M${cx + 133} 312 l5 5 l9 -10`, fill: "none", stroke: "#141c23", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }, st.doneSticker);
+      // speech bubble
+      st.bubble = svg("g", { class: "bubble", opacity: 0 }, s);
+      st.bubbleBox = svg("rect", { x: cx - 160, y: 268, width: 150, height: 30, rx: 8, fill: "#ece6d9" }, st.bubble);
+      svg("path", { d: `M${cx - 100} 297 l8 9 l4 -9 Z`, fill: "#ece6d9" }, st.bubble);
+      st.bubbleText = svg("text", { x: cx - 85, y: 288, fill: "#1c2730", "font-size": 13, "font-weight": 600, "text-anchor": "middle" }, st.bubble);
+      scene.stations[role] = st;
+    }
+    // the folder that carries the job between desks
+    scene.folder = svg("g", { class: "folder", transform: "translate(150 0)" }, s);
+    scene.folderBack = svg("rect", { x: -48, y: 446, width: 40, height: 22, rx: 3, fill: "#d9b46a" }, scene.folder);
+    svg("rect", { x: -48, y: 442, width: 16, height: 6, rx: 2, fill: "#d9b46a" }, scene.folder);
+    svg("rect", { x: -44, y: 452, width: 32, height: 2, fill: "#a8874a" }, scene.folder);
+    svg("rect", { x: -44, y: 458, width: 24, height: 2, fill: "#a8874a" }, scene.folder);
+  }
+
+  // ---------- turning events into a model ----------
+  function emptyModel(rec) {
+    const roles = {};
+    for (const r of ROLES) roles[r] = { state: "idle", bubble: "", screen: { title: "", lines: [] } };
+    return { rec, roles, active: null, folder: "planner", folderReturned: false, round: 0, checklist: [], feed: [],
+      gate: null, files: {}, diff: "", finished: null, focus: null, startTime: null, now: null };
+  }
+
+  function screenFrom(role, tool) {
+    const a = args(tool.arguments), out = String(tool.output || "");
+    switch (tool.name) {
+      case "read_file": return { title: a.path || "file", lines: lines(out).map((t) => ({ t })) };
+      case "list_files": return { title: "files", lines: lines(out).map((t) => ({ t })) };
+      case "write_file": return { title: `${a.path || "file"} (saved)`, lines: lines(a.content).map((t) => ({ t })) };
+      case "run_tests": {
+        const ls = lines(out);
+        return { title: "running the tests", lines: ls.map((t) => ({ t, tone: /PASSED|passed/.test(t) && !/failed/.test(t) ? "good" : /FAIL|failed|Error/.test(t) ? "bad" : null })) };
+      }
+      case "run_python": return { title: "quick check", lines: [...lines(a.code).map((t) => ({ t: "> " + t, tone: "dim" })), ...lines(out.replace(/^exit code 0\n?/, "")).map((t) => ({ t }))] };
+      case "show_diff": return { title: "the changes", lines: lines(out).map((t) => ({ t, tone: t.startsWith("+") && !t.startsWith("+++") ? "add" : t.startsWith("-") && !t.startsWith("---") ? "del" : null })) };
+      default: return { title: tool.name, lines: lines(out).map((t) => ({ t })) };
+    }
+  }
+  function actionText(tool) {
+    const a = args(tool.arguments), out = String(tool.output || "");
+    switch (tool.name) {
+      case "read_file": return [`Reading ${clip(a.path || "a file", 16)}`, `opened ${a.path || "a file"}`];
+      case "list_files": return ["Looking at the files", "looked at the files"];
+      case "write_file": return [`Saving ${clip(a.path || "a file", 17)}`, `saved ${a.path || "a file"}`];
+      case "run_tests": return ["Running the tests", out.startsWith("Tests PASSED") ? "ran the tests: all passed" : out.startsWith("Tests FAILED") ? "ran the tests: some failed" : "ran the tests"];
+      case "run_python": return ["Trying it out", "tried some code"];
+      case "show_diff": return ["Reading the changes", "looked over the changes"];
+      default: return [`Using ${tool.name}`, `used ${tool.name}`];
+    }
+  }
+
+  const NEXT = { planner: "coder", coder: "tester", tester: "reviewer", reviewer: null };
+  function friendlyError(err) {
+    err = String(err || "");
+    if (/DailyLimitReached/.test(err)) return "The team has used up today's free AI allowance. Please come back tomorrow.";
+    if (/RateLimit|429/.test(err)) return "The AI service is busy right now. Please try again in a minute.";
+    if (/budget/i.test(err)) return "This job was too big for one run. Try asking for something smaller.";
+    if (/No API key|api key/i.test(err)) return "The AI key is not set up on this server.";
+    return "Something went wrong on the AI service's side. Please try again in a minute.";
+  }
+  function noteFrom(role, o, m) {
+    if (o.message) return o.message;
+    if (role === "planner") return `${o.summary || ""} I've put ${(o.requirements || []).length} things on the board.`.trim();
+    if (role === "coder") return o.summary || "Done, have a look.";
+    if (role === "tester") {
+      const checks = o.checks || [], bad = checks.filter((c) => !c.passed);
+      return bad.length ? `${bad.length} of ${checks.length} checks failed. ${bad[0].evidence || ""}` : `I checked all ${checks.length} items and every one holds.`;
+    }
+    const issues = o.issues || [];
+    if (o.verdict === "approve") return issues.length ? `Approved. A small suggestion for later: ${issues[0].description}` : "Looks good to me. Approved.";
+    return issues.map((i) => i.description).join(" ") || "This needs another pass.";
+  }
+
+  function apply(m, e) {
+    if (m.startTime == null) m.startTime = e.time;
+    m.now = e.time;
+    const last = () => m.feed[m.feed.length - 1];
+    const act = (role, text) => {
+      const l = last();
+      if (l && l.kind === "acts" && l.role === role) l.items.push(text); else m.feed.push({ kind: "acts", role, items: [text] });
+    };
+    const sys = (text, tone) => m.feed.push({ kind: "sys", text, tone });
+    switch (e.type) {
+      case "run_started":
+        for (const r of e.roles || []) if (r.title) titles[r.name] = r.title;
+        m.feed.push({ kind: "you", text: e.task || "" });
+        break;
+      case "agent_started": {
+        if (m.active && m.active !== e.role && m.roles[m.active].state === "active") m.roles[m.active].state = "done";
+        const back = ROLES.indexOf(e.role) < ROLES.indexOf(m.folder);
+        m.folderReturned = back;
+        m.folder = e.role; m.active = e.role; m.round = e.round || m.round;
+        m.roles[e.role].state = "active";
+        if (back) for (const r of ROLES.slice(ROLES.indexOf(e.role) + 1)) m.roles[r].state = "idle";
+        m.roles[e.role].bubble = e.role === "planner" ? "Reading your request" : e.role === "coder" ? (back ? "On it, fixing that" : "Got it, starting") : e.role === "tester" ? "Let me check" : "Having a look";
+        m.roles[e.role].screen = { title: "starting…", lines: [] };
+        break;
+      }
+      case "agent_step": {
+        for (const t of e.tools || []) {
+          const [bubble, feed] = actionText(t);
+          m.roles[e.role].bubble = bubble;
+          m.roles[e.role].screen = screenFrom(e.role, t);
+          act(e.role, feed);
+        }
+        if (!(e.tools || []).length && e.text) m.roles[e.role].bubble = "Thinking";
+        break;
+      }
+      case "agent_submitted": {
+        const o = e.output || {};
+        let to = NEXT[e.role];
+        if (e.role === "planner") {
+          m.checklist = (o.requirements || []).map((r) => ({ id: r.id, d: r.description, s: "pending", ev: "" }));
+          m.roles.planner.screen = { title: "the checklist", lines: m.checklist.map((r) => ({ t: `${r.id} ${r.d}` })) };
+        } else if (e.role === "tester") {
+          const checks = o.checks || [];
+          for (const c of checks) { const it = m.checklist.find((x) => x.id === c.requirement_id); if (it) { it.s = c.passed ? "pass" : "fail"; it.ev = c.evidence || ""; } }
+          m.roles.tester.screen = { title: "the report", lines: checks.map((c) => ({ t: `${c.passed ? "ok  " : "FAIL"} ${c.requirement_id} ${c.evidence || ""}`, tone: c.passed ? "good" : "bad" })) };
+          if (checks.some((c) => !c.passed)) to = "coder";
+        } else if (e.role === "reviewer") {
+          to = o.verdict === "approve" ? "you" : "coder";
+        }
+        const text = noteFrom(e.role, o, m);
+        m.roles[e.role].bubble = text;
+        m.feed.push({ kind: "msg", role: e.role, to, text, badge: e.role === "reviewer" ? (o.verdict === "approve" ? "Approved" : "Sent back") : null });
+        break;
+      }
+      case "agent_finished": {
+        const r = m.roles[e.role];
+        r.state = "done";
+        if (e.status === "max_steps") { r.bubble = "Ran out of time"; sys(`${titles[e.role]} ran out of time before writing a report, so the team carried on without it.`, "warn"); }
+        else if (e.status === "error") { r.bubble = "Stopped"; }
+        break;
+      }
+      case "gate":
+        m.gate = !!e.passed;
+        sys(e.passed ? "The project's own tests pass." : "The project's own tests still fail, so it goes back for another try.", e.passed ? "good" : "bad");
+        break;
+      case "run_finished":
+        m.finished = e; m.files = e.files || {}; m.diff = e.diff || "";
+        for (const r of ROLES) if (m.roles[r].state === "active") m.roles[r].state = "done";
+        m.active = null;
+        if (e.status === "completed") sys(`Done. Approved ${e.rounds > 1 ? `after ${e.rounds} rounds` : "on the first try"}. The result is below.`, "good");
+        else if (e.status === "error") sys(friendlyError(e.error), "bad");
+        else sys(e.status === "budget_exhausted" ? "The team ran out of its time allowance for this job. The best version so far is below." : "The team finished without everyone agreeing. The best version so far is below.", "bad");
+        break;
+    }
+  }
+
+  // ---------- playback ----------
+  const player = { rec: null, schedule: [], duration: 0, t: 0, speed: 1, playing: true, applied: 0, model: null, live: false, last: 0 };
+
+  function buildSchedule(events) {
+    const out = []; let t = 0;
+    events.forEach((e, i) => {
+      if (i > 0) {
+        const gap = Math.max(0, (e.time || 0) - (events[i - 1].time || 0));
+        t += Math.min(Math.max(gap, 0.45), 2.4);
+        const prev = events[i - 1];
+        if (prev.type === "agent_submitted") t += 1.3;   // let the hand-off be seen
+        if (prev.type === "agent_started") t += 0.6;
+      }
+      out.push(t);
+    });
+    return out;
+  }
+
+  function load(rec, { autoplay = true } = {}) {
+    player.rec = rec; player.live = !!rec.live;
+    player.schedule = buildSchedule(rec.events);
+    player.duration = (player.schedule.at(-1) || 0) + 1;
+    player.speed = player.speed || 1;
+    titles = { planner: "Planner", coder: "Coder", tester: "Tester", reviewer: "Reviewer" };
+    seek(0);
+    player.playing = autoplay;
+    paintTrack(); updatePlayButton();
+    $("live-badge").hidden = !player.live;
+  }
+
+  function seek(t) {
+    player.t = Math.max(0, Math.min(t, player.duration));
+    player.model = emptyModel(player.rec); player.applied = 0;
+    $("stage").classList.add("no-anim");
+    advance();
+    render();
+    requestAnimationFrame(() => requestAnimationFrame(() => $("stage").classList.remove("no-anim")));
+  }
+
+  function advance() {
+    let changed = false;
+    while (player.applied < player.rec.events.length && player.schedule[player.applied] <= player.t) {
+      apply(player.model, player.rec.events[player.applied]); player.applied++; changed = true;
+    }
+    return changed;
+  }
+
+  let lastFrame = null;
+  function frame(now) {
+    if (lastFrame != null && player.playing && player.rec) {
+      player.t += ((now - lastFrame) / 1000) * player.speed;
+      if (player.t >= player.duration && !player.live) { player.t = player.duration; player.playing = false; updatePlayButton(); }
+      if (player.live) player.t = Math.min(player.t, (player.schedule.at(-1) || 0) + 0.5);
+      if (advance()) render();
+      paintHead();
+    }
+    lastFrame = now;
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    const m = player.model; if (!m) return;
+    for (const role of ROLES) {
+      const st = scene.stations[role], r = m.roles[role];
+      st.name.textContent = titles[role];
+      setRobot(st.robot, r.state, role);
+      const on = r.state === "active";
+      st.cone.setAttribute("opacity", on ? 1 : 0); st.pool.setAttribute("opacity", on ? 1 : 0);
+      st.bulb.setAttribute("fill", on ? "#ffd58a" : "#3a464f");
+      st.status.textContent = on ? "working" : r.state === "done" ? "done" : "waiting";
+      st.doneSticker.setAttribute("opacity", r.state === "done" && m.finished && m.finished.status === "completed" ? 1 : 0);
+      st.bubble.setAttribute("opacity", on && r.bubble ? 1 : 0);
+      st.bubbleText.textContent = clip(r.bubble, 32);
+      const w = Math.max(90, Math.min(260, st.bubbleText.textContent.length * 7.4 + 24));
+      const bx = Math.min(Math.max(STATION_X[role] - 85 - w / 2, 8), 1192 - w);
+      st.bubbleBox.setAttribute("width", w); st.bubbleBox.setAttribute("x", bx);
+      st.bubbleText.setAttribute("x", bx + w / 2);
+      // mini screen
+      const scr = r.screen || { lines: [] };
+      st.screenTitle.textContent = scr.title ? clip(scr.title, 26) : (r.state === "idle" ? "" : "");
+      const shown = scr.lines.length ? scr.lines.slice(0, 8) : (r.state === "idle" ? [{ t: "", tone: null }] : []);
+      st.screenLines.forEach((node, i) => {
+        const ln = shown[i];
+        node.textContent = ln ? clip(ln.t, 28) : "";
+        node.setAttribute("fill", !ln ? "#cfe9d8" : ln.tone === "good" || ln.tone === "add" ? "#6cc28f" : ln.tone === "bad" || ln.tone === "del" ? "#e2766b" : ln.tone === "dim" ? "#77848d" : "#cfe9d8");
+      });
+      st.screenBg.setAttribute("fill", r.state === "idle" && !scr.lines.length ? "#0b1a1c" : "#0e2326");
+    }
+    // on narrow screens the camera follows whoever has the folder
+    const stage = $("stage");
+    if (stage.clientWidth < 640) {
+      const x = Math.min(Math.max(STATION_X[m.active || m.folder || "planner"] - 250, 0), 700);
+      stage.setAttribute("viewBox", `${x} 226 500 384`);
+    } else stage.setAttribute("viewBox", "0 0 1200 620");
+    // folder
+    const fx = STATION_X[m.folder] || 150;
+    scene.folder.setAttribute("transform", `translate(${fx} 0)`);
+    scene.folderBack.setAttribute("fill", m.folderReturned ? "#e2a094" : "#d9b46a");
+    // test light
+    scene.testLight.setAttribute("fill", m.gate === null ? "#3a464f" : m.gate ? "#6cc28f" : "#e2766b");
+    // clock: elapsed real time of the run
+    const elapsed = m.startTime != null && m.now != null ? m.now - m.startTime : 0;
+    const minA = (elapsed / 60) * 360, hrA = (elapsed / 3600) * 360 + 300;
+    scene.minHand.setAttribute("transform", `rotate(${minA} 1010 116)`);
+    scene.hourHand.setAttribute("transform", `rotate(${hrA} 1010 116)`);
+    scene.clockLabel.textContent = `Real time ${fmt(elapsed)}`;
+    renderBoard(m); renderFeed(m); renderBigScreen(m); renderChecks(m); renderResult(m);
+  }
+
+  function renderBoard(m) {
+    scene.notes.replaceChildren();
+    scene.boardEmpty.style.display = m.checklist.length ? "none" : "";
+    const n = m.checklist.length;
+    const passed = m.checklist.filter((c) => c.s === "pass").length;
+    scene.boardCount.textContent = n ? `${passed} of ${n} checked` : "";
+    const cols = n > 14 ? 10 : 7, size = n > 14 ? 30 : 40, gap = 4;
+    m.checklist.forEach((c, i) => {
+      const x = 436 + (i % cols) * (size + gap), y = 76 + Math.floor(i / cols) * (size + gap);
+      const fill = c.s === "pass" ? "#8fd3a8" : c.s === "fail" ? "#efa093" : "#f1df8a";
+      const g = svg("g", {}, scene.notes);
+      svg("rect", { x, y, width: size, height: size, rx: 2, fill, transform: `rotate(${(i % 3) - 1} ${x + size / 2} ${y + size / 2})` }, g);
+      const tx = svg("text", { x: x + size / 2, y: y + size / 2 + 5, "font-size": n > 14 ? 11 : 13, "font-weight": 800, fill: "#3b3a36", "text-anchor": "middle" }, g);
+      tx.textContent = c.id;
+    });
+  }
+
+  let lastFeedKey = "";
+  function face(role) {
+    const pic = document.createElementNS(NS, "svg"); pic.setAttribute("viewBox", "-40 -78 80 84"); pic.setAttribute("aria-hidden", "true"); pic.setAttribute("class", "face");
+    const bot = drawRobot(pic, role, 0, 0); setRobot(bot, "active", role); bot.g.classList.remove("active");
+    return pic;
+  }
+  function renderFeed(m) {
+    const key = m.feed.length + ":" + m.feed.reduce((n, f) => n + (f.items ? f.items.length : 0), 0);
+    if (key === lastFeedKey) return;
+    lastFeedKey = key;
+    const feed = $("feed");
+    if (!m.feed.length) { feed.replaceChildren(el("li", { class: "sys", text: "The team is about to start." })); return; }
+    const nameOf = (r) => (r === "you" ? "you" : titles[r] || r);
+    feed.replaceChildren(...m.feed.map((f) => {
+      if (f.kind === "you") return el("li", { class: "you" }, el("div", { class: "bubble-you" }, el("span", { class: "from", text: "You asked" }), clip(f.text, 600)));
+      if (f.kind === "sys") return el("li", { class: `sys tone-${f.tone || "dim"}`, text: f.text });
+      if (f.kind === "acts") {
+        const grouped = [];
+        for (const it of f.items) { const g = grouped[grouped.length - 1]; if (g && g.t === it) g.n++; else grouped.push({ t: it, n: 1 }); }
+        const words = grouped.map((g) => (g.n > 1 ? `${g.t} (${g.n === 2 ? "twice" : `${g.n} times`})` : g.t));
+        return el("li", { class: "acts", style: `--c: ${COLORS[f.role]}` }, el("span", { text: `${titles[f.role]} ${words.slice(0, 6).join(", ")}${words.length > 6 ? `, and ${words.length - 6} more things` : ""}.` }));
+      }
+      return el("li", { class: "msg", style: `--c: ${COLORS[f.role]}` }, face(f.role),
+        el("div", { class: "bubble-msg" },
+          el("span", { class: "from" }, el("strong", { text: titles[f.role] }), f.to ? ` to ${nameOf(f.to)}` : "", f.badge ? el("span", { class: `badge ${f.badge === "Approved" ? "ok" : "no"}`, text: f.badge }) : null),
+          el("span", { text: clip(f.text, 700) })));
+    }));
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function renderScreenTabs() {
+    $("screen-tabs").replaceChildren(...ROLES.map((r) => {
+      const b = el("button", { class: "tab", role: "tab", style: `--c: ${COLORS[r]}`, "aria-selected": "false", "data-role": r, text: titles[r] });
+      b.addEventListener("click", () => { player.model.focus = player.model.focus === r ? null : r; renderBigScreen(player.model); });
+      return b;
+    }));
+  }
+  function renderBigScreen(m) {
+    const role = m.focus || m.active || [...ROLES].reverse().find((r) => m.roles[r].screen.lines.length) || "planner";
+    for (const b of $("screen-tabs").children) { b.setAttribute("aria-selected", String(b.dataset.role === role)); b.textContent = titles[b.dataset.role]; }
+    const scr = m.roles[role].screen;
+    const box = $("big-screen");
+    box.replaceChildren(el("span", { class: "scr-title", text: scr.title ? `${titles[role]}: ${scr.title}` : `${titles[role]} has not started yet.` }),
+      ...scr.lines.slice(0, 200).map((l) => el("span", { class: l.tone ? `tone-${l.tone}` : "" }, l.t + "\n")));
+  }
+
+  function renderChecks(m) {
+    const n = m.checklist.length, passed = m.checklist.filter((c) => c.s === "pass").length, failed = m.checklist.filter((c) => c.s === "fail").length;
+    $("board-count").textContent = n ? `${passed} passed${failed ? `, ${failed} failed` : ""}, ${n - passed - failed} not checked` : "";
+    if (!n) { $("checks").replaceChildren(el("li", { class: "note", style: "grid-template-columns: 1fr", text: "The Planner's checklist will appear here." })); return; }
+    $("checks").replaceChildren(...m.checklist.map((c) => el("li", { "data-s": c.s },
+      el("span", { class: "mark", "aria-label": c.s === "pass" ? "passed" : c.s === "fail" ? "failed" : "not checked", text: c.s === "pass" ? "✓" : c.s === "fail" ? "✕" : "" }),
+      el("span", {}, el("span", { class: "rid", text: c.id }), c.d, c.ev ? el("span", { class: "ev", text: clip(c.ev, 140) }) : null))));
+  }
+
+  let resultTab = "changes", lastResultKey = "";
+  function renderResult(m) {
+    const key = `${!!m.finished}|${resultTab}|${Object.keys(m.files).join(",")}`;
+    if (key === lastResultKey) return; lastResultKey = key;
+    const tabs = [];
+    const isFix = (m.rec && m.rec.kind) !== "create";
+    if (isFix && m.diff && m.diff !== "(no changes)") tabs.push(["changes", "What changed"]);
+    for (const f of Object.keys(m.files)) tabs.push([`file:${f}`, f]);
+    if (!tabs.find((t) => t[0] === resultTab) && tabs.length) resultTab = tabs[0][0];
+    $("result-tabs").replaceChildren(...tabs.map(([k, label]) => {
+      const b = el("button", { class: "tab", role: "tab", "aria-selected": String(k === resultTab), text: label });
+      b.addEventListener("click", () => { resultTab = k; lastResultKey = ""; renderResult(player.model); });
+      return b;
+    }));
+    const view = $("result-view");
+    $("result-actions").hidden = !(m.finished && resultTab.startsWith("file:"));
+    view.classList.toggle("prose", resultTab.startsWith("file:") && !/\.(py|js|css|json)$/i.test(resultTab));
+    if (!m.finished) { view.textContent = "The result appears here when the team finishes."; $("summary").replaceChildren(); return; }
+    if (resultTab === "changes") view.replaceChildren(...lines(m.diff).map((t) => el("span", { class: t.startsWith("+") && !t.startsWith("+++") ? "tone-add" : t.startsWith("-") && !t.startsWith("---") ? "tone-del" : t.startsWith("@@") ? "tone-dim" : "" }, t + "\n")));
+    else { const f = resultTab.slice(5); if (/\.html?$/i.test(f)) { const fr = el("iframe", { title: `Preview of ${f}`, sandbox: "allow-scripts", style: "width:100%;height:400px;border:0;background:#fff;border-radius:6px" }); fr.srcdoc = m.files[f]; view.replaceChildren(fr); } else view.textContent = m.files[f]; }
+    const f = m.finished, by = f.tokens_by_role || {};
+    $("summary").replaceChildren(
+      el("span", {}, "Status ", el("strong", { text: f.status === "completed" ? "approved" : f.status === "error" ? "stopped" : "not approved" })),
+      el("span", {}, "Rounds ", el("strong", { text: f.rounds })),
+      el("span", {}, "Took ", el("strong", { text: `${Math.round(f.duration_s || 0)} s` })),
+      el("span", { title: "Tokens are the pieces of text the AI reads and writes; they measure the cost." }, "Tokens used ", el("strong", { text: (f.total_tokens || 0).toLocaleString("en") })),
+      ...ROLES.filter((r) => by[r]).map((r) => el("span", {}, `${titles[r]} `, el("strong", { text: by[r].toLocaleString("en") }))));
+  }
+  function currentFile() { const m = player.model; return m && resultTab.startsWith("file:") ? [resultTab.slice(5), m.files[resultTab.slice(5)] || ""] : null; }
+  $("copy-result").addEventListener("click", async () => {
+    const cur = currentFile(); if (!cur) return;
+    try { await navigator.clipboard.writeText(cur[1]); $("copy-result").textContent = "Copied"; } catch { $("copy-result").textContent = "Copy failed"; }
+    setTimeout(() => { $("copy-result").textContent = "Copy"; }, 1600);
+  });
+  $("download-result").addEventListener("click", () => {
+    const cur = currentFile(); if (!cur) return;
+    const a = el("a", { href: URL.createObjectURL(new Blob([cur[1]], { type: "text/plain" })), download: cur[0] });
+    document.body.append(a); a.click(); a.remove();
+  });
+
+  // ---------- player controls ----------
+  function updatePlayButton() {
+    const b = $("play");
+    b.setAttribute("aria-label", player.playing ? "Pause" : "Play");
+    b.innerHTML = player.playing
+      ? '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="3" width="4" height="14" rx="1" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1" fill="currentColor"/></svg>'
+      : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3l12 7-12 7z" fill="currentColor"/></svg>';
+  }
+  function paintTrack() {
+    const bar = $("track-bar"); bar.replaceChildren();
+    const ev = player.rec.events, D = player.duration || 1;
+    const open = {};
+    ev.forEach((e, i) => {
+      if (e.type === "agent_started") open[e.role] = player.schedule[i];
+      if (e.type === "agent_finished" && open[e.role] != null) {
+        const a = open[e.role], b = player.schedule[i];
+        bar.append(el("span", { class: "track-seg", style: `left:${(a / D) * 100}%;width:${Math.max(0.6, ((b - a) / D) * 100)}%;background:${COLORS[e.role]}` }));
+        delete open[e.role];
+      }
+    });
+    paintHead();
+  }
+  function paintHead() {
+    const D = player.duration || 1;
+    $("track-head").style.left = `${(player.t / D) * 100}%`;
+    $("time").textContent = `${fmt(player.t)} / ${fmt(D)}`;
+    $("track").setAttribute("aria-valuenow", String(Math.round((player.t / D) * 100)));
+  }
+  $("play").addEventListener("click", () => {
+    if (!player.playing && player.t >= player.duration) seek(0);
+    player.playing = !player.playing; updatePlayButton();
+  });
+  $("restart").addEventListener("click", () => { seek(0); player.playing = true; updatePlayButton(); });
+  $("track").addEventListener("click", (ev) => {
+    const r = $("track").getBoundingClientRect();
+    seek(((ev.clientX - r.left) / r.width) * player.duration); paintHead();
+  });
+  $("track").addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowRight") { seek(player.t + 5); paintHead(); }
+    if (ev.key === "ArrowLeft") { seek(player.t - 5); paintHead(); }
+    if (ev.key === " ") { ev.preventDefault(); $("play").click(); }
+  });
+  for (const b of document.querySelectorAll(".speed button")) b.addEventListener("click", () => {
+    player.speed = Number(b.dataset.speed);
+    for (const o of document.querySelectorAll(".speed button")) o.setAttribute("aria-pressed", String(o === b));
+  });
+
+  // ---------- asking for a new job ----------
+  const IDEAS = [
+    ["Study plan", "Make a two-week study plan for learning the basics of linear algebra (vectors, matrices, systems of equations, determinants) for a first-year computer science student with one hour a day. Use a table with one row per day, and end with a short list of free resources."],
+    ["Bakery web page", "Build a single web page for a neighbourhood bakery called Crumb & Co.: a welcome section, today's three specials with prices in Pakistani rupees, opening hours, and a contact section. It must look good on phones."],
+    ["Wedding toast", "Write a warm, funny two-minute wedding toast for my best friend Sara, who loves hiking and terrible puns. Keep it kind, with one short story and a toast at the end."],
+    ["Clothing collection", "Describe a six-look autumn clothing collection inspired by the old city of Lahore. For each look, list the pieces, the fabrics, and the colours, and give the collection a name."],
+    ["Trip packing list", "Make a packing list for a five-day family trip to the mountains in December, grouped by category, with a short checklist of things to do the night before leaving."],
+  ];
+  let fixSamples = [];
+  const askNote = (text, cls = "note") => { const n = $("ask-note"); n.className = cls; n.textContent = text; };
+
+  function renderIdeas(extra = []) {
+    $("ideas").replaceChildren(el("span", { class: "note", text: "Ideas:" }), ...[...IDEAS, ...extra].map(([label, prompt]) => {
+      const c = el("button", { type: "button", class: "chip", text: label });
+      c.addEventListener("click", () => { const t = $("ask-text"); t.value = prompt; t.focus(); autoGrow(); });
+      return c;
+    }));
+    if (window.RELAY_LIVE) {
+      const c = el("button", { type: "button", class: "chip", text: "Fix a buggy program" });
+      c.addEventListener("click", () => submitJob("fix"));
+      $("ideas").append(c);
+    }
+  }
+  function autoGrow() { const t = $("ask-text"); t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight + 2, 240)}px`; }
+  $("ask-text").addEventListener("input", autoGrow);
+  $("ask-text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) $("ask").requestSubmit(); });
+  $("ask").addEventListener("submit", (ev) => { ev.preventDefault(); submitJob("create"); });
+
+  let waitTimer = null;
+  async function submitJob(kind) {
+    clearTimeout(waitTimer);
+    if (!window.RELAY_LIVE) {
+      askNote("This copy of the site only plays recorded jobs. New jobs work on the live site, or when Relay runs on your own computer (see Run it yourself).", "note error");
+      return;
+    }
+    let body;
+    if (kind === "fix") {
+      if (!fixSamples.length) { askNote("No sample programs are available.", "note error"); return; }
+      const pick = fixSamples[Math.floor(Math.random() * fixSamples.length)];
+      body = { kind, sample: pick.name, prompt: pick.prompt };
+    } else {
+      const prompt = $("ask-text").value.trim();
+      if (!prompt) { askNote("Write what you want the team to do, or tap one of the ideas.", "note error"); $("ask-text").focus(); return; }
+      body = { kind, prompt };
+    }
+    const go = $("ask-go"); go.disabled = true; askNote("Starting…");
+    try {
+      const res = await fetch("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      const detail = typeof data.detail === "string" ? data.detail : "The job could not start.";
+      if (res.status === 409) {
+        askNote("Another visitor's job is running. Yours will start by itself as soon as it finishes.", "note");
+        waitTimer = setTimeout(() => submitJob(kind), 6000);
+        return;
+      }
+      if (!res.ok) throw new Error(detail);
+      askNote("The team is on it. You can follow along below.");
+      selectJob(null);
+      startLive(data.id, body.prompt, kind);
+      document.querySelector(".stage-wrap").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    } catch (err) { askNote(err.message, "note error"); }
+    finally { go.disabled = false; }
+  }
+
+  async function setUpLive() {
+    if (!window.RELAY_LIVE) { renderIdeas(); return; }
+    try {
+      const [examples, status] = await Promise.all([fetch("/api/examples").then((r) => r.json()), fetch("/api/status").then((r) => r.json())]);
+      fixSamples = examples.fix || [];
+      const landing = (examples.create || []).find((x) => /landing/i.test(x.title));
+      renderIdeas(landing ? [["Landing-page prompt", landing.prompt]] : []);
+      if (!status.api_key_configured) askNote("No AI key is set up yet, so only recorded jobs can be watched.", "note error");
+      else if (status.public && !status.open_today) askNote("The team has used up today's free allowance. Come back tomorrow, or watch a past job below.", "note error");
+      else if (status.public && status.jobs_left != null) askNote(`You can ask for ${status.jobs_left} more job${status.jobs_left === 1 ? "" : "s"} today. Each one takes about a minute.`);
+    } catch { renderIdeas(); }
+  }
+
+  // ---------- recorded jobs ----------
+  function renderPicker(recs) {
+    $("picker").replaceChildren(...recs.map((rec) => {
+      const b = el("button", { type: "button", class: "job", "aria-pressed": "false" },
+        el("span", { class: "job-title", text: rec.title }), el("span", { class: "job-meta", text: rec.task }));
+      b.addEventListener("click", () => { clearTimeout(waitTimer); selectJob(b); load(rec); });
+      return b;
+    }));
+  }
+  function selectJob(btn) { for (const b of $("picker").children) b.setAttribute("aria-pressed", String(b === btn)); }
+
+  function startLive(id, task, kind) {
+    const rec = { title: "Your job", task, kind, live: true, events: [] };
+    load(rec);
+    const src = new EventSource(`/api/runs/${id}/events`);
+    src.onmessage = (msg) => {
+      const e = JSON.parse(msg.data);
+      e.time = e.time || Date.now() / 1000;
+      rec.events.push(e);
+      // new events are scheduled at the end so playback follows the job as it happens
+      const prev = player.schedule.at(-1);
+      player.schedule.push(prev == null ? 0 : Math.max(prev + 0.45, player.t));
+      player.duration = player.schedule.at(-1) + 1;
+      if (e.type === "run_finished") { player.live = false; $("live-badge").hidden = true; }
+      paintTrack();
+    };
+    src.addEventListener("end", () => src.close());
+    src.onerror = () => { if (player.live) askNote("Lost the connection to the server. Refresh the page to try again.", "note error"); src.close(); };
+  }
+
+  // ---------- crew cards and results chart ----------
+  function renderCrew() {
+    $("crew-grid").replaceChildren(...ROLES.map((r) => {
+      const pic = document.createElementNS(NS, "svg"); pic.setAttribute("viewBox", "-66 -84 132 164"); pic.setAttribute("aria-hidden", "true");
+      const bot = drawRobot(pic, r, 0, 0); setRobot(bot, "active", r); bot.g.classList.remove("active");
+      const [edits, runs, steps] = TOOLS[r];
+      return el("article", { class: "member" }, pic, el("h3", { text: CREW_NAMES[r] }), el("p", { text: JOBS[r] }),
+        el("dl", {}, el("dt", { text: "Edits files" }), el("dd", { text: edits }), el("dt", { text: "Runs code" }), el("dd", { text: runs }), el("dt", { text: "Step limit" }), el("dd", { text: steps })));
+    }));
+  }
+
+  function renderChart() {
+    const data = [["Easy", 12, 12, 12, 12], ["Medium", 15, 15, 15, 15], ["Hard", 14, 17, 17, 17], ["All", 41, 44, 44, 44]];
+    const W = 560, rowH = 58, top = 6, left = 70, right = 70, H = top + data.length * rowH + 26;
+    const s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", `0 0 ${W} ${H}`); s.setAttribute("role", "img");
+    s.setAttribute("aria-label", "Pass rate by difficulty. Easy: both 100%. Medium: both 100%. Hard: one robot 82%, team 100%. All: one robot 93%, team 100%.");
+    const x = (p) => left + p * (W - left - right);
+    for (const p of [0, 0.5, 1]) {
+      svg("line", { x1: x(p), y1: top, x2: x(p), y2: H - 22, stroke: "#34444f", "stroke-width": 1 }, s);
+      svg("text", { x: x(p), y: H - 6, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s).textContent = `${p * 100}%`;
+    }
+    const tip = el("div", { class: "tip", hidden: "" }); $("pass-chart").append(tip);
+    data.forEach(([label, sp, sn, tp, tn], i) => {
+      const y = top + i * rowH;
+      svg("text", { x: left - 10, y: y + 26, fill: "#ece6d9", "font-size": 14, "font-weight": i === 3 ? 800 : 600, "text-anchor": "end" }, s).textContent = label;
+      [[sp / sn, "#6789c9", "One robot", `${sp} of ${sn}`, 6], [tp / tn, "#bd8626", "Team of four", `${tp} of ${tn}`, 25]].forEach(([v, c, who, txt, dy]) => {
+        const w = x(v) - left;
+        const bar = svg("path", { d: `M${left} ${y + dy} h${w - 4} q4 0 4 4 v8 q0 4 -4 4 h${-(w - 4)} z`, fill: c }, s);
+        svg("text", { x: x(v) + 6, y: y + dy + 12, fill: "#a7b0b6", "font-size": 12 }, s).textContent = `${Math.round(v * 100)}%`;
+        const hit = svg("rect", { x: left, y: y + dy - 3, width: W - left - right + 40, height: 22, fill: "transparent" }, s);
+        hit.addEventListener("mousemove", (ev) => { tip.hidden = false; tip.textContent = `${label}, ${who}: ${txt} runs passed`; const r = $("pass-chart").getBoundingClientRect(); tip.style.left = `${ev.clientX - r.left + 12}px`; tip.style.top = `${ev.clientY - r.top - 30}px`; });
+        hit.addEventListener("mouseleave", () => { tip.hidden = true; });
+      });
+    });
+    svg("line", { x1: left, y1: top, x2: left, y2: H - 22, stroke: "#77848d", "stroke-width": 1.5 }, s);
+    $("pass-chart").prepend(s);
+
+    const tokens = [["planner", 9586], ["coder", 14372], ["tester", 16834], ["reviewer", 7140]];
+    const max = 16834;
+    $("token-bars").replaceChildren(...tokens.map(([r, v]) => el("div", { class: "tok-row" },
+      el("span", { text: titles[r] }), el("span", { class: "tok-bar", style: `--c:${COLORS[r]};width:${(v / max) * 100}%` }), el("span", { class: "num", text: v.toLocaleString("en") }))));
+  }
+
+  for (const b of document.querySelectorAll(".copy")) b.addEventListener("click", async () => {
+    const text = b.previousElementSibling.textContent;
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; }
+    catch { const range = document.createRange(); range.selectNodeContents(b.previousElementSibling); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range); b.textContent = "Selected"; }
+    setTimeout(() => { b.textContent = "Copy"; }, 1600);
+  });
+
+  // ---------- start ----------
+  buildScene();
+  renderScreenTabs();
+  renderCrew();
+  renderChart();
+  const recs = (window.RELAY_RECORDINGS || []).filter((r) => r.events && r.events.length);
+  renderPicker(recs);
+  setUpLive();
+  if (recs.length) { selectJob($("picker").children[0]); load(recs[0], { autoplay: !reduceMotion }); }
+  updatePlayButton();
+  addEventListener("resize", () => render());
+  requestAnimationFrame(frame);
+})();
+</script>

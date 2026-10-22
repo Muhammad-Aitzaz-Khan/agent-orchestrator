@@ -329,7 +329,8 @@ def _run_rounds(task, root, baseline, state, team, run_role, event, updates, sav
 
         # ---- TEST ----
         event("test", f"checking {len(state.plan.requirements)} requirements")
-        tested = run_role(tester, tester_task(task, state.plan), baseline)
+        note = round_.changes.message if round_.changes else ""
+        tested = run_role(tester, tester_task(task, state.plan, note), baseline)
         if tested.output is not None:
             round_.test_report = TestReport.model_validate(tested.output)
             failures = round_.test_report.failures

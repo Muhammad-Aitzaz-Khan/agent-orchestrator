@@ -33,6 +33,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"orchestrator" = ["guard/*.py"]
 "orchestrator.web" = ["static/*", "replays/*.jsonl"]
 
 [tool.pytest.ini_options]

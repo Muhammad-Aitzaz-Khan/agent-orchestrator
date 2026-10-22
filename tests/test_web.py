@@ -125,3 +125,82 @@ def test_bundled_replays_contain_no_personal_paths():
     for path in REPLAYS_DIR.glob("*.jsonl"):
         text = path.read_text(encoding="utf-8")
         assert not user_path.search(text) and "AppData" not in text, path.name
+
+
+# ---------- the page ----------
+
+
+def test_page_embeds_the_recordings_safely():
+    from orchestrator.web.site import _script_json, load_recordings, render_fragment, render_page
+
+    page = render_page(live=False)
+    assert page.startswith("<!doctype html>") and "window.RELAY_LIVE = false" in page
+    assert len(load_recordings()) >= 3 and '"events":[' in page
+    assert "<html" not in render_fragment()
+    assert "</script>" not in _script_json({"text": "</script><script>alert(1)</script>"})
+
+
+# ---------- public mode ----------
+
+
+class Client:
+    """Stands in for the provider client the server builds from its key."""
+
+
+@pytest.fixture
+def public_factory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GROQ_API_KEY", "server-key")
+    monkeypatch.setenv("RELAY_JOBS_PER_VISITOR", "2")
+    monkeypatch.delenv("SANDBOX", raising=False)
+    monkeypatch.delenv("RELAY_GUARD_DENY", raising=False)
+    monkeypatch.setattr("orchestrator.web.app.load_dotenv", lambda: None)  # ignore a real .env
+    return partial(create_app, public=True, client_factory=Client)
+
+
+def recording_runner(seen):
+    def runner(prompt, workspace, client=None, token_budget=None, **kwargs):
+        seen.append({"client": client, "budget": token_budget, "workspace": workspace})
+        return run_orchestrator(prompt, workspace, client=FakeClient(create_script()),
+                                models=FAKE_MODELS, sleep=lambda s: None, **kwargs)
+    return runner
+
+
+def test_public_mode_hides_the_key_and_uses_the_guarded_sandbox(public_factory):
+    import os
+    seen = []
+    client = TestClient(public_factory(runner=recording_runner(seen)))
+    assert "GROQ_API_KEY" not in os.environ  # read once, then removed
+    status = client.get("/api/status").json()
+    assert status["public"] and status["api_key_configured"] and status["sandbox"] == "guarded"
+    assert status["jobs_left"] == 2
+    run_id = client.post("/api/runs", json={"prompt": "Write three paragraphs.", "kind": "create"}).json()["id"]
+    events = read_events(client, run_id)
+    assert events[-1]["status"] == "completed"
+    assert isinstance(seen[0]["client"], Client) and seen[0]["budget"]
+    assert not seen[0]["workspace"].exists()  # nothing a visitor typed stays on disk
+
+
+def test_public_mode_limits_jobs_per_visitor(public_factory):
+    client = TestClient(public_factory(runner=recording_runner([])))
+    for _ in range(2):
+        run_id = client.post("/api/runs", json={"prompt": "x", "kind": "create"}).json()["id"]
+        read_events(client, run_id)
+    third = client.post("/api/runs", json={"prompt": "x", "kind": "create"})
+    assert third.status_code == 429 and "today" in third.json()["detail"]
+
+
+def test_public_mode_closes_when_the_daily_allowance_is_used(public_factory, monkeypatch):
+    monkeypatch.setenv("RELAY_DAILY_TOKENS", "10")
+    client = TestClient(public_factory(runner=recording_runner([])))
+    run_id = client.post("/api/runs", json={"prompt": "x", "kind": "create"}).json()["id"]
+    read_events(client, run_id)  # the fake run uses more than 10 tokens
+    assert client.get("/api/status").json()["open_today"] is False
+    assert client.post("/api/runs", json={"prompt": "x", "kind": "create"}).status_code == 429
+
+
+def test_public_mode_without_a_key_only_offers_recordings(public_factory, monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY")
+    client = TestClient(public_factory(runner=recording_runner([])))
+    assert client.get("/api/status").json()["api_key_configured"] is False
+    assert client.post("/api/runs", json={"prompt": "x", "kind": "create"}).status_code == 503

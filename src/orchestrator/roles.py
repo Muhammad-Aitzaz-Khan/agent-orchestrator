@@ -127,7 +127,7 @@ PLANNER = Role(
     tools=("list_files", "read_file", "run_tests"),
     output_model=Plan,
     submit_tool="submit_plan",
-    submit_description="Submit the plan: a summary, the files to change, and every requirement.",
+    submit_description="Submit the plan: a summary, the files to change, and every requirement. Add a short, friendly note for your teammate in message.",
     max_steps=8,
 )
 
@@ -138,7 +138,7 @@ CODER = Role(
     tools=("list_files", "read_file", "write_file", "run_tests", "show_diff"),
     output_model=ChangeSummary,
     submit_tool="submit_changes",
-    submit_description="Submit a summary of the changes once the code is fixed.",
+    submit_description="Submit a summary of the changes once the code is fixed. Add a short, friendly note for your teammate in message.",
     max_steps=15,
 )
 
@@ -149,7 +149,7 @@ TESTER = Role(
     tools=("list_files", "read_file", "run_tests", "run_python"),
     output_model=TestReport,
     submit_tool="submit_test_report",
-    submit_description="Submit one check per requirement, each with evidence.",
+    submit_description="Submit one check per requirement, each with evidence. Add a short, friendly note for your teammate in message.",
     max_steps=10,
 )
 
@@ -160,7 +160,7 @@ REVIEWER = Role(
     tools=("read_file", "show_diff", "run_tests"),
     output_model=Review,
     submit_tool="submit_review",
-    submit_description="Submit the verdict (approve or revise) and any issues found.",
+    submit_description="Submit the verdict (approve or revise) and any issues found. Add a short, friendly note for your teammate in message.",
     max_steps=6,
 )
 
@@ -233,7 +233,7 @@ CREATE_PLANNER = Role(
     tools=("list_files", "read_file"),
     output_model=Plan,
     submit_tool="submit_plan",
-    submit_description="Submit the plan: a summary, the deliverable files, and every requirement.",
+    submit_description="Submit the plan: a summary, the deliverable files, and every requirement. Add a short, friendly note for your teammate in message.",
     max_steps=6,
 )
 
@@ -244,7 +244,7 @@ BUILDER = Role(
     tools=("list_files", "read_file", "write_file", "run_python", "show_diff"),
     output_model=ChangeSummary,
     submit_tool="submit_changes",
-    submit_description="Submit a summary of what was created once the deliverable is saved.",
+    submit_description="Submit a summary of what was created once the deliverable is saved. Add a short, friendly note for your teammate in message.",
     max_steps=12,
 )
 
@@ -255,7 +255,7 @@ CHECKER = Role(
     tools=("list_files", "read_file", "run_python"),
     output_model=TestReport,
     submit_tool="submit_test_report",
-    submit_description="Submit one check per requirement, each with evidence.",
+    submit_description="Submit one check per requirement, each with evidence. Add a short, friendly note for your teammate in message.",
     max_steps=10,
 )
 
@@ -266,7 +266,7 @@ CREATE_REVIEWER = Role(
     tools=("list_files", "read_file", "show_diff"),
     output_model=Review,
     submit_tool="submit_review",
-    submit_description="Submit the verdict (approve or revise) and any issues found.",
+    submit_description="Submit the verdict (approve or revise) and any issues found. Add a short, friendly note for your teammate in message.",
     max_steps=6,
 )
 
@@ -296,16 +296,21 @@ def coder_task(task: str, plan: Plan, feedback: str | None) -> str:
         f"Files likely to change: {', '.join(plan.files_to_change) or 'not specified'}\n\n"
         f"Requirements (all must hold):\n{format_requirements(plan)}"
     )
+    if plan.message:
+        message += f"\n\nNote from the Planner: {plan.message}"
     if feedback:
         message += f"\n\nYour previous attempt was not accepted. Feedback to address:\n{feedback}"
     return message
 
 
-def tester_task(task: str, plan: Plan) -> str:
-    return (
+def tester_task(task: str, plan: Plan, note: str = "") -> str:
+    message = (
         f"Task given to the team:\n{task}\n\n"
         f"Requirements to check, one by one:\n{format_requirements(plan)}"
     )
+    if note:
+        message += f"\n\nNote from the Coder: {note}"
+    return message
 
 
 def reviewer_task(task: str, plan: Plan, report: TestReport | None) -> str:
@@ -315,6 +320,8 @@ def reviewer_task(task: str, plan: Plan, report: TestReport | None) -> str:
             f"- {c.requirement_id}: {'passed' if c.passed else 'FAILED'}" for c in report.checks
         )
         message += f"\n\nTester's results:\n{checks}"
+        if report.message:
+            message += f"\n\nNote from the Tester: {report.message}"
     return message
 
 
@@ -326,7 +333,11 @@ def feedback_from(round_: Round) -> str:
     if round_.test_report is not None:
         for check in round_.test_report.failures:
             parts.append(f"Requirement {check.requirement_id} fails. Evidence: {check.evidence}")
+    if round_.test_report is not None and round_.test_report.failures and round_.test_report.message:
+        parts.append(f"Note from the Tester: {round_.test_report.message}")
     if round_.review is not None and round_.review.verdict == "revise":
+        if round_.review.message:
+            parts.append(f"Note from the Reviewer: {round_.review.message}")
         for issue in round_.review.issues:
             where = f" ({issue.file})" if issue.file else ""
             parts.append(f"Reviewer [{issue.severity}]{where}: {issue.description}")

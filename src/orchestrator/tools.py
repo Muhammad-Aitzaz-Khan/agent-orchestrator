@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -192,16 +193,44 @@ DEFAULT_SANDBOX_IMAGE = "orchestrator-sandbox"
 
 def sandbox_mode() -> str:
     mode = os.getenv("SANDBOX", "local").strip().lower()
-    if mode not in ("local", "docker"):
-        raise ValueError(f"SANDBOX must be 'local' or 'docker', not {mode!r}")
+    if mode not in ("local", "docker", "guarded"):
+        raise ValueError(f"SANDBOX must be 'local', 'docker', or 'guarded', not {mode!r}")
     return mode
+
+
+GUARD_DIR = Path(__file__).parent / "guard"
+
+
+def _limit_resources(timeout: int) -> Callable[[], None] | None:
+    """Memory, file-size, and CPU limits for a guarded child process (POSIX only)."""
+    try:
+        import resource
+    except ImportError:  # Windows
+        return None
+
+    def apply() -> None:
+        resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024,) * 2)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (20 * 1024 * 1024,) * 2)
+        resource.setrlimit(resource.RLIMIT_CPU, (timeout + 5,) * 2)
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        if hasattr(resource, "RLIMIT_NPROC"):  # no new processes (ignored when run as root)
+            resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
+
+    return apply
 
 
 def run_python_process(
     args: list[str], cwd: Path, timeout: int, extra_env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess:
     """Run `python <args>` in cwd with the configured sandbox. Raises TimeoutExpired."""
-    if sandbox_mode() == "local":
+    mode = sandbox_mode()
+    if mode in ("local", "guarded"):
+        env = {**_clean_env(), **(extra_env or {})}
+        preexec = None
+        if mode == "guarded":  # see guard/sitecustomize.py
+            env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(GUARD_DIR), env.get("PYTHONPATH")]))
+            env.pop("PYTHONSTARTUP", None)
+            preexec = _limit_resources(timeout)
         return subprocess.run(  # non-zero exit codes are expected and handled by callers
             [sys.executable, *args],
             check=False,
@@ -211,7 +240,8 @@ def run_python_process(
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
-            env={**_clean_env(), **(extra_env or {})},
+            env=env,
+            preexec_fn=preexec,
         )
 
     name = f"orch-sandbox-{uuid.uuid4().hex[:12]}"

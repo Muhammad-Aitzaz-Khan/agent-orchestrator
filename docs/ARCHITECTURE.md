@@ -110,18 +110,47 @@ rounds, decisions, tokens per role) after every phase.
 
 ## The web app (Relay)
 
-`python -m orchestrator.web` serves a page where anyone can type a request (create mode) or
-pick a sample project to fix, then watch the agents work. The orchestrator emits structured
-events (`run_started`, `agent_started`, `agent_step`, `agent_submitted`, `agent_finished`,
-`gate`, `decision`, `run_finished`) through `on_update`; the server streams them to the page
-with Server-Sent Events. The page shows the four roles as stations on a line, the conversation
-in plain language, a checklist that ticks as the Tester reports, and the result (rendered
-Markdown, a sandboxed preview for HTML, or a diff).
+`python -m orchestrator.web` serves one page (`web/static/relay.html`): a box to ask the team
+for anything (create mode) or to fix a sample project, and an office scene where the four
+robots sit at desks. The robot holding the job's folder has its lamp on, its mini screen shows
+its latest tool call (the file it opened, the code it saved, the test output), and the wall
+board shows the checklist turning green as the Checker reports. Below the office: the active
+robot's screen enlarged, the team chat, the checklist with evidence, and the result.
 
-The server listens on 127.0.0.1, allows one live run at a time, limits request length, and
-saves each run's events so it can become a replay. `web/replays/` holds recordings rebuilt
-from real eval traces by `web/record.py` (paths that reveal a user's name are removed), so
-the app can be demonstrated without an API key.
+The orchestrator emits structured events (`run_started`, `agent_started`, `agent_step`,
+`agent_submitted`, `agent_finished`, `gate`, `decision`, `run_finished`) through `on_update`,
+and the server streams them with Server-Sent Events. The page turns them into a model and
+plays it back, so a live job and a recording use the same code.
+
+**Notes between robots.** Every submission has a `message` field: a short note, in plain
+English, to the robot that works next. It is shown in the team chat and is also added to that
+robot's instructions ("Note from the Planner: ..."), so the hand-off carries the sender's
+emphasis as well as the structured data.
+
+`web/site.py` builds the page with the recordings embedded: served by the app with live jobs
+switched on, or written out as a single static file that only plays recordings.
+`web/replays/` holds recordings rebuilt from real eval traces by `web/record.py`, with paths
+that reveal a user's name removed.
+
+**Local mode** listens on 127.0.0.1, allows one live job at a time, limits request length, and
+saves each job's events so it can become a recording.
+
+**Public mode** (`RELAY_PUBLIC=1`, used by `deploy/huggingface`) is for a site anyone can use
+without a key:
+
+- The key is read once into the provider client and removed from the environment; the
+  process is made non-dumpable so other processes of the same user cannot read
+  `/proc/<pid>/environ`.
+- `SANDBOX=guarded`: every Python process the agents start loads `guard/sitecustomize.py`,
+  which installs an audit hook (it cannot be removed once installed) that blocks network
+  access, starting programs, ctypes, reading `/proc`, `/sys`, and the app's folder, and
+  writing outside the job's folder and the temp folder. The child also gets a zero process
+  limit (so even a direct `fork_exec` fails), and memory, file-size, and CPU limits.
+- `RELAY_DAILY_TOKENS` (default 180,000) for the whole site and `RELAY_JOBS_PER_VISITOR`
+  (default 3) per day, and a 60,000-token budget per job. When the provider reports its daily
+  limit, the site closes for the day.
+- Jobs run in a temporary folder that is deleted when the job ends; events are kept only in
+  memory.
 
 ## Measuring what each part adds
 
