@@ -1,0 +1,12 @@
+# Backup wake-up call. The server pings itself every 10 minutes to stay awake on Render's
+# free plan; if it was ever stopped, this wakes it within 2 hours. Written by deploy/deploy.py.
+name: Keep Relay awake
+on:
+  schedule:
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --retry 5 --retry-delay 20 --max-time 120 "https://relay-u0de.onrender.com/healthz"
