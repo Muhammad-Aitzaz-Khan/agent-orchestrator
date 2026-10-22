@@ -135,6 +135,10 @@ class Store:
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
         if url.startswith("sqlite"):
             kwargs["connect_args"] = {"check_same_thread": False}
+        elif url.startswith("postgresql+psycopg"):
+            # Hosted Postgres often sits behind a connection pooler (Neon's "-pooler" address),
+            # which does not keep server-side prepared statements between transactions.
+            kwargs["connect_args"] = {"prepare_threshold": None}
         self.engine = sa.create_engine(url, **kwargs)
         metadata.create_all(self.engine)
 
