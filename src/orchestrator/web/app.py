@@ -1,28 +1,31 @@
-"""The Relay web app: a personal assistant run by a team of AI agents.
+"""The Relay website: a personal assistant run by a team of AI agents.
 
 Pages
-    GET  /                          the assistant (static/app.html); signed-out visitors see
-                                    what it does and a recorded demo
-    GET  /demo                      the robot office playing recorded runs (static/relay.html)
+    GET  /                          the assistant (static/app.html); people who aren't signed
+                                    in see the front page, with sign-in and the free day
+    GET  /office                    the robot office on its own, shown inside the assistant
+    GET  /demo                      the office playing recorded runs (members only in public)
+    GET  /healthz                   "is it up?" for the host and the keep-awake ping
     GET  /sw.js, /manifest.webmanifest, /icons/*   notifications and installing the app
 
 The assistant's API (sign-in, the Concierge, jobs, routines, files, notifications) is in
-assistant_api.py. The developer playground below runs the team directly on a request or a
-sample project; it is only available on your own computer (not in public mode):
+assistant_api.py, and the protective layer (headers, limits) in security.py. The developer
+playground below runs the team directly on a request or a sample project; it only works on
+your own computer:
 
     GET  /api/status, /api/examples, /api/replays
     POST /api/runs                  start a live run {prompt, kind, sample?} -> {id}
     POST /api/replays/{name}        start a replay -> {id}
     GET  /api/runs/{id}/events      the run's events as a Server-Sent Events stream
 
-Local mode (the default) listens on 127.0.0.1, signs you in automatically, and keeps data in
-relay.db. Public mode (RELAY_PUBLIC=1, e.g. on Hugging Face Spaces):
-    - people sign in with Google; ALLOWED_EMAILS lists who may use it
+On your own computer (the default) Relay listens on 127.0.0.1, signs you in automatically,
+and keeps its data in relay.db. On a public server (RELAY_PUBLIC=1, as on Render):
+    - people sign in with an invite code or Google, or try it out for a day as a guest
     - the AI key is read once at start-up and removed from the environment, and the process
-      is made non-dumpable, so code the agents run cannot read it from /proc
+      is made non-dumpable, so code the agents run can't read it from /proc
     - model-written code runs with SANDBOX=guarded (see orchestrator/guard)
-    - daily token allowances for the whole site and per person (see assistant/runner.py)
-Use a key from a provider account with no payment method, so the site can never cost money.
+    - daily AI allowances for the site, each person, and guests (assistant/runner.py, trial.py)
+Use a key from a provider account with no payment method, so the AI can never cost money.
 """
 import asyncio
 import contextlib
@@ -53,15 +56,17 @@ from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
 
 from orchestrator.agent import default_model, make_client
-from orchestrator.assistant import crypto
+from orchestrator.assistant import crypto, trial
 from orchestrator.assistant.store import Store
 from orchestrator.assistant.worker import Worker
 from orchestrator.orchestrator import run_orchestrator
 from orchestrator.tools import sandbox_mode
 from orchestrator.web.assistant_api import assistant_router
+from orchestrator.web.security import BodyLimit, SecurityHeaders
 from orchestrator.web.site import load_recordings, render_page
 
 WEB_DIR = Path(__file__).parent
+MAX_BODY_BYTES = 11 * 1024 * 1024  # uploads are capped at 10 MB, everything else is far smaller
 STATIC_DIR = WEB_DIR / "static"
 REPLAYS_DIR = WEB_DIR / "replays"
 PROJECT_ROOT = WEB_DIR.parents[2]  # the repository root (src/orchestrator/web -> repo)
@@ -181,9 +186,12 @@ def create_app(
         yield
         holder["worker"].stop()
 
-    app = FastAPI(title="Relay", docs_url=None, redoc_url=None, lifespan=lifespan)
+    # No /docs, /redoc or /openapi.json: a map of every endpoint helps attackers more than us.
+    app = FastAPI(title="Relay", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(SessionMiddleware, secret_key=crypto.secret_key(), session_cookie="relay",
                        max_age=30 * 24 * 3600, same_site="lax", https_only=public)
+    app.add_middleware(SecurityHeaders, public=public)
+    app.add_middleware(BodyLimit, limit=MAX_BODY_BYTES)
     runs: dict[str, WebRun] = {}
     lock = threading.Lock()
 
@@ -217,7 +225,8 @@ def create_app(
     # office, the recordings, and every API behind them. (Locally you are always signed in.)
     def signed_in(request: Request) -> bool:
         uid = request.session.get("uid")
-        return bool(uid) and store.user(uid) is not None
+        user = store.user(uid) if uid else None
+        return user is not None and not trial.expired(user)
 
     def members_only(request: Request) -> None:
         if public and not signed_in(request):

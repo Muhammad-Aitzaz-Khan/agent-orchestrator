@@ -200,6 +200,16 @@ def test_a_job_runs_the_team_and_keeps_only_the_result(store, user, no_network, 
     assert sent and sent[0][0][2] == "Morning news"
 
 
+def test_finished_work_is_delivered_even_if_the_checker_breaks(store, user, no_network, monkeypatch):
+    from test_agent import bad_request
+    monkeypatch.setattr(runner.push, "send", lambda *a, **k: 1)
+    script = team_script()[:3] + [bad_request("The AI service had an internal problem")]
+    job = store.add_job(user["id"], "Morning news", "news", {"topics": ["technology"]}, "A short brief.")
+    done = runner.run_job(store, job, client=FakeClient(script), models=MODELS, sleep=lambda s: None)
+    assert done["status"] == "done" and done["files"] == {"output.md": BRIEF}
+    assert "the Checker couldn't finish checking it" in done["summary"]
+
+
 def test_the_team_sees_the_gathered_material(store, user, no_network):
     client = FakeClient(team_script())
     job = store.add_job(user["id"], "News", "news", {"topics": ["technology"]}, "A short brief.")
@@ -314,8 +324,12 @@ def test_push_subscriptions_are_checked(app_client):
     client, _, _ = app_client
     bad = client.post("/api/push/subscribe", json={"endpoint": "http://evil", "keys": {}}, headers=HDR)
     assert bad.status_code == 400
+    keys = {"p256dh": "k", "auth": "a"}
+    # anything but a real push service is refused, or the server could be pointed inwards (SSRF)
+    for sneaky in ("https://169.254.169.254/latest", "https://localhost/x", "https://evil.example/fcm.googleapis.com"):
+        assert client.post("/api/push/subscribe", headers=HDR, json={"endpoint": sneaky, "keys": keys}).status_code == 400
     good = client.post("/api/push/subscribe", headers=HDR,
-                       json={"endpoint": "https://push.example/abc", "keys": {"p256dh": "k", "auth": "a"}})
+                       json={"endpoint": "https://fcm.googleapis.com/fcm/send/abc", "keys": keys})
     assert good.status_code == 200 and client.get("/api/me").json()["push_devices"] == 1
 
 
@@ -398,3 +412,16 @@ def test_the_server_keeps_itself_awake(store, monkeypatch):
     w.keep_awake()
     w.keep_awake()  # not again within 10 minutes
     assert pings == ["https://relay.example/healthz"]
+
+
+def test_news_jobs_without_topics_take_them_from_the_title():
+    assert runner.topics_from_title("Top Tech News Briefing") == ["Tech"]
+    assert runner.topics_from_title("Cricket and Pakistan headlines") == ["Cricket", "Pakistan"]
+    assert runner.topics_from_title("Today's top stories") == []
+
+
+def test_a_proposal_without_a_title_still_works():
+    from orchestrator.assistant import concierge
+    p = concierge.normalise({"action": "job", "skill": "news", "topics": ["technology"],
+                             "instructions": "Top 5 tech stories.", "message": "I'll get them."}, [])
+    assert p["title"] == "Technology news" and p["params"]["topics"] == ["technology"]

@@ -1,4 +1,6 @@
-# Python
+# What stays on your computer and never goes to GitHub.
+
+# Python's own leftovers
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -9,34 +11,41 @@ dist/
 .venv/
 venv/
 
-# Secrets
+# Secrets: your API keys and the deploy script's keys
 .env
+deploy/keys.env
+deploy/generated.env
 
-# Generated at runtime
-runs/
-*.jsonl
+# Relay's local data (made when you run it on your computer)
+relay.db
+relay.secret
 *.sqlite
 *.db
+
+# Traces from agent runs (they can be large and may contain your data)
+runs/
+*.jsonl
+# ...except the recordings the office plays, which are part of the app
+!src/orchestrator/web/replays/*.jsonl
+
+# Benchmark runs: only the two that evals/RESULTS.md reports are kept
+evals/results/*
+!evals/results/20261021-213140.json
+!evals/results/20261021-213140-rescored.json
+!evals/results/20261021-214435.json
+!evals/results/20261021-214435-rescored.json
 
 # Tool caches
 .pytest_cache/
 .ruff_cache/
 
-# Editors and OS
+# Editors and operating systems
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-# Private drafts (launch posts, notes)
+
+# Private notes, drafts and early experiments
 drafts/
-
-# Replays shipped with the web app are recordings, not runtime traces
-!src/orchestrator/web/replays/*.jsonl
-
-# The assistant's local data and secrets
-relay.db
-relay.secret
-
-# Deployment secrets made by deploy/deploy.py (never commit)
-deploy/keys.env
-deploy/generated.env
+examples/
+start_relay_local.py

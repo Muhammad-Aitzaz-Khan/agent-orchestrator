@@ -98,6 +98,15 @@ usage = sa.Table(
     sa.Column("tokens", sa.Integer, default=0),
 )
 
+# Who has had a free day ("Try it out"). Keys are keyed hashes of a browser token or a
+# network address (see assistant/trial.py); nothing here identifies a person.
+trial_starts = sa.Table(
+    "trial_starts", metadata,
+    sa.Column("id", sa.String(32), primary_key=True),
+    sa.Column("key", sa.String(64), index=True, nullable=False),
+    sa.Column("created_at", UTCNow, index=True),
+)
+
 
 def now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
@@ -328,3 +337,51 @@ class Store:
             query = query.where(usage.c.user_id == user_id)
         with self.engine.connect() as c:
             return int(c.execute(query).scalar() or 0)
+
+    # ---------- free days ("Try it out") ----------
+
+    def add_guest(self, domain: str, until: dt.datetime) -> dict:
+        user_id = new_id()
+        self._run(users.insert().values(id=user_id, email=f"guest-{user_id[:12]}@{domain}", name="Guest",
+                                        picture="", tz="Asia/Karachi", prefs={"trial_until": until.isoformat()},
+                                        created_at=now()))
+        return self.user(user_id)
+
+    def guests(self, domain: str) -> list[dict]:
+        return self._all(sa.select(users).where(users.c.email.like(f"%@{domain}")))
+
+    def guest_usage_today(self, domain: str) -> int:
+        day = now().date().isoformat()
+        query = (sa.select(sa.func.coalesce(sa.func.sum(usage.c.tokens), 0))
+                 .select_from(usage.join(users, usage.c.user_id == users.c.id))
+                 .where((usage.c.day == day) & users.c.email.like(f"%@{domain}")))
+        with self.engine.connect() as c:
+            return int(c.execute(query).scalar() or 0)
+
+    def add_trial_start(self, keys: list[str]) -> None:
+        with self.engine.begin() as c:
+            for key in keys:
+                c.execute(trial_starts.insert().values(id=new_id(), key=key, created_at=now()))
+
+    def trial_starts(self, key: str, since: dt.datetime | None = None) -> int:
+        query = sa.select(sa.func.count()).select_from(trial_starts).where(trial_starts.c.key == key)
+        if since is not None:
+            query = query.where(trial_starts.c.created_at >= since)
+        with self.engine.connect() as c:
+            return int(c.execute(query).scalar() or 0)
+
+    def trial_starts_total(self, since: dt.datetime) -> int:
+        query = (sa.select(sa.func.count()).select_from(trial_starts)
+                 .where((trial_starts.c.created_at >= since) & trial_starts.c.key.like("browser:%")))
+        with self.engine.connect() as c:
+            return int(c.execute(query).scalar() or 0)
+
+    def prune_trial_starts(self, before: dt.datetime) -> int:
+        return self._run(trial_starts.delete().where(trial_starts.c.created_at < before))
+
+    def delete_user_and_data(self, user_id: str) -> None:
+        """Everything a person made, then the person: used for guests whose free day is over."""
+        with self.engine.begin() as c:
+            for table in (jobs, routines, uploads, push_subs, connections):
+                c.execute(table.delete().where(table.c.user_id == user_id))
+            c.execute(users.delete().where(users.c.id == user_id))

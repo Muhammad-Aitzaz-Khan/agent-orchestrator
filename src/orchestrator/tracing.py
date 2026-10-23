@@ -1,4 +1,5 @@
-"""Records every event in a run to a JSONL file for debugging and analysis."""
+"""Writes down everything that happens in a run, one JSON line per event, so a run can be
+debugged, measured, or replayed in the office afterwards."""
 import json
 from datetime import UTC, datetime
 from pathlib import Path

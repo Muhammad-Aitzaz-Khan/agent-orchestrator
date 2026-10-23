@@ -12,13 +12,15 @@ import io
 import ipaddress
 import re
 import socket
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import quote_plus, urljoin, urlparse
+from xml.etree.ElementTree import ParseError
 
 import httpx
+from defusedxml import ElementTree as safe_xml
+from defusedxml.common import DefusedXmlException
 
 from orchestrator.assistant import google
 
@@ -131,8 +133,8 @@ def news(topics: list[str], region: str = "PK", per_topic: int = 7) -> str:
         url = (f"https://news.google.com/rss/search?q={quote_plus(topic)}+when:1d"
                f"&hl=en-{region}&gl={region}&ceid={region}:en")
         try:
-            root = ET.fromstring(http_get(url))
-        except (GatherError, ET.ParseError, httpx.HTTPError) as e:
+            root = safe_xml.fromstring(http_get(url))  # defused: no entity bombs from a feed
+        except (GatherError, ParseError, DefusedXmlException, httpx.HTTPError) as e:
             sections.append(f"## {topic}\n\n(Could not load news: {e})")
             continue
         items = []

@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 import httpx
 
-from orchestrator.assistant import push
+from orchestrator.assistant import push, trial
 from orchestrator.assistant import schedule as sched
 from orchestrator.assistant.runner import LiveEvents, run_job
 from orchestrator.assistant.store import Store, now
@@ -21,6 +21,7 @@ from orchestrator.assistant.store import Store, now
 log = logging.getLogger(__name__)
 POLL_S = 5
 KEEP_AWAKE_S = 600
+CLEAN_UP_S = 3600
 
 
 def start_due_routines(store: Store, at: dt.datetime | None = None) -> list[dict]:
@@ -29,8 +30,8 @@ def start_due_routines(store: Store, at: dt.datetime | None = None) -> list[dict
     queued = []
     for routine in store.due_routines(at):
         user = store.user(routine["user_id"])
-        if user is None:
-            continue
+        if user is None or trial.expired(user, at):
+            continue  # a guest's free day is over: their routines stop (and are deleted soon)
         nxt = sched.next_run(routine["schedule"], user.get("tz"), at)
         store.update_routine(routine["id"], last_run_at=at, next_run_at=nxt,
                              enabled=routine["enabled"] and nxt is not None)
@@ -59,6 +60,7 @@ class Worker:
         self._thread: threading.Thread | None = None
         self._client = None
         self._last_ping = -KEEP_AWAKE_S
+        self._last_clean = -CLEAN_UP_S
 
     def client(self):
         if self._client is None and self.client_factory is not None:
@@ -79,6 +81,9 @@ class Worker:
         self._wake.set()
 
     def run_once(self) -> dict | None:
+        if time.monotonic() - self._last_clean >= CLEAN_UP_S:  # free days that are over
+            self._last_clean = time.monotonic()
+            trial.clean_up(self.store)
         start_due_routines(self.store)
         job = self.store.next_queued_job()
         if job is None:

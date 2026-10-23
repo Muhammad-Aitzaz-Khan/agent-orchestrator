@@ -1,4 +1,11 @@
-"""The core agent loop."""
+"""One AI agent, from start to finish.
+
+The loop is simple: send the conversation to the model, run whichever tools it asks for,
+add the results to the conversation, and repeat until the agent hands in its work (a role's
+submit tool) or runs out of steps. Most of this file is about what happens when things go
+wrong, because with free AI services they often do: rate limits, a busy provider, tool calls
+the model got wrong, an agent going round in circles, or one that forgets to hand in.
+"""
 import json
 import os
 import time
@@ -42,7 +49,7 @@ DEFAULT_MAX_CONTEXT_CHARS = 20_000  # about 5,000 tokens; Groq's free tier caps 
 
 MAX_RATE_LIMIT_WAITS = 5  # retries per model call for short (per-minute) limits
 MAX_WAIT_S = 90  # never sleep longer than this for one retry
-MAX_BAD_TOOL_CALL_RETRIES = 2  # retries when the model produces a malformed tool call
+MAX_BAD_TOOL_CALL_RETRIES = 4  # retries when the model produces a malformed tool call
 STEPS_LEFT_WARNING = 2  # remind a role to submit when this many steps remain
 LOOP_REPEATS = 3  # identical tool calls in this many consecutive steps count as a loop
 MAX_SUBMIT_NUDGES = 2  # reminders to a role that stops without calling its submit tool
@@ -146,12 +153,14 @@ def call_model(
                 raise
             bad_tool_calls += 1
             tracer.log("bad_tool_call_retry", attempt=bad_tool_calls, error=str(e)[:300])
-            correction = {
-                "role": "user",
-                "content": "Your last reply was rejected because a tool call was malformed "
-                f"({_api_error_message(e)}). Every tool call must include all of its required "
-                "arguments with the correct names. Try again.",
-            }
+            problem = _api_error_message(e)
+            hint = ("Every tool call must include all of its required arguments with the correct names.")
+            if "json" in problem.lower():
+                # The usual slip: raw code instead of a JSON object. Show the shape it needs.
+                hint = ('Tool arguments must be one JSON object. For code, put it in a string, for '
+                        'example {"code": "import json\\nprint(json.dumps({\'ok\': 1}))"}, with '
+                        "quotes and newlines escaped. Keep scripts short.")
+            correction = {"role": "user", "content": f"Your last tool call was rejected ({problem}). {hint} Try again."}
             kwargs = {**kwargs, "messages": [*original_messages, correction]}
         except (InternalServerError, APIConnectionError, APITimeoutError) as e:
             if unavailable_waits == MAX_UNAVAILABLE_RETRIES:
@@ -236,8 +245,12 @@ def run_agent(
             to_send = compact(messages, context_chars)  # full history stays in `messages`
             sent_chars = conversation_size(to_send)
             t0 = time.perf_counter()
+            extra = {}
+            if role and number == max_steps:
+                # Last step: the only thing it may do is hand in its work.
+                extra["tool_choice"] = {"type": "function", "function": {"name": role.submit_tool}}
             response = call_model(
-                client, tracer, sleep, model=model, messages=to_send, tools=schemas
+                client, tracer, sleep, model=model, messages=to_send, tools=schemas, **extra
             )
             latency_ms = int((time.perf_counter() - t0) * 1000)
 

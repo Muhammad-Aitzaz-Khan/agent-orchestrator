@@ -1,6 +1,6 @@
 """Put Relay online in one command: python deploy/deploy.py
 
-Relay runs on Render's free web service (no card), with its data in a free Neon database.
+Relay runs on Render's free web service, with its data in a free Neon database.
 The first run creates deploy/keys.env for you to fill in. The next run:
 
     - creates your secrets (session key, notification keys, an invite code per person)
@@ -234,7 +234,10 @@ def main() -> None:
             "VAPID_SUBJECT": f"mailto:{emails[0]}",
             "INVITES": gen["INVITES"],
             "ALLOWED_EMAILS": ",".join(emails),
-            "LLM_MODEL_CONCIERGE": "openai/gpt-oss-20b",  # a separate free daily quota for the quick part
+            # The Concierge and Planner run on the smaller model, which has its own free daily
+            # quota; the Builder, Checker, and Reviewer need the bigger one (tested for real).
+            "LLM_MODEL_CONCIERGE": "openai/gpt-oss-20b",
+            "LLM_MODEL_PLANNER": "openai/gpt-oss-20b",
         }
         if keys.get("GOOGLE_CLIENT_ID") and keys.get("GOOGLE_CLIENT_SECRET"):
             env["GOOGLE_CLIENT_ID"] = keys["GOOGLE_CLIENT_ID"]

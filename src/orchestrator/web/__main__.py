@@ -22,7 +22,8 @@ def main() -> None:
     print(f"Relay is running at {url}  (press Ctrl+C to stop)")
     if not args.no_browser:
         webbrowser.open(url)
-    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
+    # server_header=False: don't announce the server software; proxy headers come from the host.
+    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning", server_header=False)
 
 
 if __name__ == "__main__":

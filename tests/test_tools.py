@@ -182,3 +182,29 @@ def test_tools_outside_the_allowed_set_are_refused(project):
     out = execute_tool("write_file", '{"path": "new.py", "content": "x"}', project, ctx)
     assert "not available to this agent" in out
     assert not (project / "new.py").exists()
+
+
+def test_find_text_lists_matching_lines(tmp_path):
+    from orchestrator.tools import ToolContext, execute_tool
+    (tmp_path / "inputs").mkdir()
+    (tmp_path / "inputs" / "news.md").write_text("Tech exports hit a record - Dawn\nCricket: Pakistan win\n")
+    ctx = ToolContext(root=tmp_path, allowed=frozenset({"find_text"}))
+    out = execute_tool("find_text", '{"text": "dawn"}', tmp_path, ctx)
+    assert out == "inputs/news.md:1: Tech exports hit a record - Dawn"
+    assert "No line contains" in execute_tool("find_text", '{"text": "made up"}', tmp_path, ctx)
+    assert "Error" in execute_tool("find_text", '{"text": "x", "path": "../etc"}', tmp_path, ctx)
+
+
+def test_find_text_checks_several_phrases_at_once(tmp_path):
+    from orchestrator.tools import find_text
+    (tmp_path / "news.md").write_text("Tech exports hit a record - Dawn\n")
+    out = find_text(tmp_path, "record | invented headline")
+    assert "## record\nnews.md:1:" in out and "## invented headline\nNo line contains" in out
+
+
+def test_read_file_can_read_a_few_lines(tmp_path):
+    from orchestrator.tools import ToolContext, execute_tool
+    (tmp_path / "a.md").write_text("one\ntwo\nthree\nfour\n")
+    ctx = ToolContext(root=tmp_path, allowed=frozenset({"read_file"}))
+    assert execute_tool("read_file", '{"path": "a.md", "start_line": 2, "end_line": 3}', tmp_path, ctx) == "2: two\n3: three"
+    assert execute_tool("read_file", '{"path": "a.md", "line_start": 4}', tmp_path, ctx) == "4: four"

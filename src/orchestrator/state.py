@@ -1,4 +1,5 @@
-"""Data models describing agent runs and multi-agent orchestration."""
+"""What gets passed around: the record of an agent's run, and what each role hands to the
+next one (a plan, a change summary, a test report, a review), validated by pydantic."""
 from typing import Literal
 
 from pydantic import BaseModel, Field

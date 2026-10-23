@@ -1,9 +1,11 @@
-# Relay on Render (free web service). Created and configured by deploy/deploy.py.
+# Relay on Render's free web service. deploy/deploy.py creates and configures the service.
 FROM python:3.12-slim
 
+# Run as an ordinary user, never root.
 RUN useradd -m -u 1000 user
 WORKDIR /home/user/app
 COPY --chown=user pyproject.toml README.md ./
+COPY --chown=user deploy/render/constraints.txt ./constraints.txt
 COPY --chown=user src ./src
 COPY --chown=user evals/tasks ./evals/tasks
 USER user
@@ -11,7 +13,8 @@ ENV PATH=/home/user/.local/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     RELAY_PUBLIC=1
-RUN pip install --no-cache-dir --user -e ".[web]" pytest
+# Pinned versions (constraints.txt), so every build installs the same audited packages.
+RUN pip install --no-cache-dir --user -c constraints.txt -e ".[web]" pytest
 
 # Render tells the app which port to use in $PORT.
 CMD python -m orchestrator.web --host 0.0.0.0 --port ${PORT:-10000} --no-browser

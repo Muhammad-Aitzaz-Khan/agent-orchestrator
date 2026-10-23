@@ -1,12 +1,11 @@
 [project]
 name = "agent-orchestrator"
 version = "0.1.0"
-description = "A multi-agent orchestration system with tracing and an evaluation harness"
+description = "Relay: a personal assistant run by a small team of AI agents, with a benchmark that measures whether the team helps"
 readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
-    "anthropic",
     "openai",
     "pydantic>=2",
     "python-dotenv",
@@ -25,6 +24,7 @@ web = [
     "pywebpush",
     "pypdf",
     "python-docx",
+    "defusedxml",
 ]
 dev = [
     "agent-orchestrator[web]",

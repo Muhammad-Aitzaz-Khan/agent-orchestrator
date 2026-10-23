@@ -4,6 +4,7 @@ Daily allowances keep a shared free AI key from being used up by one person or o
 ASSISTANT_DAILY_TOKENS for the whole site and ASSISTANT_USER_DAILY_TOKENS per person.
 """
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -12,12 +13,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from orchestrator.assistant import gather as gathering
-from orchestrator.assistant import push
+from orchestrator.assistant import push, trial
 from orchestrator.assistant.skills import SKILLS
 from orchestrator.assistant.store import Store, now
 from orchestrator.orchestrator import run_orchestrator
 
-JOB_TOKEN_BUDGET = 70_000
+JOB_TOKEN_BUDGET = 90_000
 
 
 def _limit(name: str, default: int) -> int:
@@ -28,8 +29,11 @@ def _limit(name: str, default: int) -> int:
 
 
 def allowance_left(store: Store, user_id: str) -> bool:
-    return (store.usage_today() < _limit("ASSISTANT_DAILY_TOKENS", 180_000)
-            and store.usage_today(user_id) < _limit("ASSISTANT_USER_DAILY_TOKENS", 90_000))
+    if not (store.usage_today() < _limit("ASSISTANT_DAILY_TOKENS", 350_000)
+            and store.usage_today(user_id) < _limit("ASSISTANT_USER_DAILY_TOKENS", 150_000)):
+        return False
+    user = store.user(user_id)  # guests on a free day have a smaller allowance of their own
+    return not trial.is_guest(user) or trial.allowance_left(store, user)
 
 
 class LiveEvents:
@@ -71,6 +75,22 @@ def task_text(job: dict, gathered: gathering.Gathered, user: dict) -> str:
     return "\n".join(lines)
 
 
+_NOT_TOPICS = {"top", "news", "headlines", "headline", "briefing", "brief", "daily", "morning", "evening",
+               "today", "today's", "todays", "weekly", "the", "a", "an", "of", "for", "my", "your", "stories",
+               "story", "update", "updates", "digest", "roundup", "latest", "summary", "report", "every", "day",
+               "five", "ten", "5", "10", "on", "about", "in", "with", "links"}
+
+
+def topics_from_title(title: str) -> list[str]:
+    """A safety net for news jobs that arrive without topics: 'Top Tech News Briefing' -> ['Tech']."""
+    topics = []
+    for part in re.split(r",| and | & ", title or ""):
+        words = [w for w in re.findall(r"[\w'&+-]+", part) if w.lower() not in _NOT_TOPICS]
+        if words:
+            topics.append(" ".join(words))
+    return topics[:5]
+
+
 def _summary(result, files: dict[str, str]) -> str:
     review = next((r.review for r in reversed(result.rounds) if r.review), None)
     if review and review.verdict == "approve" and review.message:
@@ -105,8 +125,12 @@ def run_job(store: Store, job: dict, client=None, models: dict | None = None,
         return finish("done", job["params"].get("text") or job["title"])
 
     routine = store.routine(user["id"], job["routine_id"]) if job.get("routine_id") else None
-    gathered = gathering.gather(skill.key, job["params"] or {}, user, store,
-                                (routine or {}).get("state") or {})
+    params = dict(job["params"] or {})
+    if skill.key in ("news", "morning_brief") and not params.get("topics"):
+        guessed = topics_from_title(job["title"])
+        if guessed:
+            params["topics"] = guessed
+    gathered = gathering.gather(skill.key, params, user, store, (routine or {}).get("state") or {})
     if routine and gathered.state:
         store.update_routine(routine["id"], state=gathered.state)
 
@@ -143,6 +167,16 @@ def run_job(store: Store, job: dict, client=None, models: dict | None = None,
             return finish("skipped", "The AI's free allowance for today ran out, so this was skipped. "
                                      "It resets at midnight (UTC).", error=result.error[:1000],
                           events=events, tokens=result.total_tokens)
+        # The Builder finished but a later robot couldn't (the AI service hiccupped, or the job
+        # ran out of budget). The work is real, so deliver it and say plainly what's missing.
+        built = any(r.role == "coder" and r.submitted for r in result.agent_runs)
+        if files and built and result.status in ("error", "budget_exhausted"):
+            stopped = next((r.role for r in reversed(result.agent_runs) if r.status == "error"), "")
+            who = {"tester": "the Checker", "reviewer": "the Reviewer"}.get(stopped, "the team")
+            note = (f"Here it is, but {who} couldn't finish checking it" if result.status == "error"
+                    else "Here it is, but the team ran out of time to finish checking it")
+            return finish("done", f"{note}, so give it a quick look yourself.", files=files,
+                          events=events, tokens=result.total_tokens, error=(result.error or "")[:1000])
         if result.status == "error" or not files:
             reason = result.error or "the team did not produce a result"
             return finish("failed", "Something went wrong, so this did not finish. It will try "

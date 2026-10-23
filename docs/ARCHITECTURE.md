@@ -1,22 +1,31 @@
 # Architecture
 
-The system fixes bugs in Python projects. It has two modes that share the same agent loop,
-tools, and eval harness:
+Relay is a personal assistant run by a small team of AI agents. Underneath it is one idea,
+built and measured before the assistant existed: instead of one agent doing everything, four
+agents each do one job (plan, build, check, review) and hand the work along.
+
+That team was first built to fix bugs in Python projects, because bugs come with tests that
+say objectively whether the work is right. It has two modes that share the same agent loop,
+tools, and benchmark:
 
 - **single**: one agent reads the code, edits it, and runs the tests (the baseline).
-- **multi**: a team of four agents (Planner, Coder, Tester, Reviewer) coordinated by an
+- **multi**: the team of four (Planner, Coder, Tester, Reviewer) coordinated by an
   orchestrator.
 
-Both modes are measured on the same benchmark (`evals/`), so the effect of the team can be
-compared directly with the single agent on the same model. Results: `evals/RESULTS.md`.
+Both modes run on the same benchmark (`evals/`) with the same model, so the effect of the team
+can be compared directly. Results: `evals/RESULTS.md`. The assistant (further down) is the
+same team doing everyday jobs.
 
-The team handles two kinds of work with the same state machine (`roles.TEAMS`):
+The team handles three kinds of work with the same state machine (`roles.TEAMS`):
 
 - **fix**: repair an existing project. The Planner reads code, docstrings, and failing tests.
 - **create**: make something new from a request (writing, a web page, code). The Coder is
   called the Builder, the Tester measures anything countable with `run_python` (paragraphs,
   word counts, forbidden words), and the test gate is skipped when the project has no tests.
   Random choices must be made with Python's `random` module, never claimed.
+- **assist**: the personal assistant's jobs (news, email summaries, flashcards...). The
+  material is gathered first into `inputs/`, and the Checker looks every fact up there with
+  `find_text` instead of writing code (see "What real use taught us").
 
 ## Why four agents
 
@@ -93,6 +102,9 @@ blockers send the Coder back, which keeps style preferences from consuming round
 **Graceful degradation.** If the Planner fails to submit, a fallback plan built from the task
 is used. If the Tester fails to submit, the run continues to review, marked as unverified.
 If the Reviewer fails to submit after the tests and checks passed, the change is accepted.
+In the assistant, if the Builder finished but a later robot couldn't (the AI service failed,
+or the job ran out of budget), the person still gets the result, with a plain note saying it
+wasn't fully checked. On its last step, a robot can only hand in its work.
 Failures that retrying cannot fix (the daily API limit) abort the whole run with status
 `error`, which the eval harness excludes from scores and can resume later.
 
@@ -101,8 +113,10 @@ budget (`ORCH_TOKEN_BUDGET`, default 100,000) ends the run as `budget_exhausted`
 a free-tier daily quota from one runaway task.
 
 **A model per role.** `LLM_MODEL_PLANNER`, `LLM_MODEL_CODER`, `LLM_MODEL_TESTER`, and
-`LLM_MODEL_REVIEWER` override `LLM_MODEL`. A smaller model can do the cheaper roles, and on
-Groq, where each model has its own daily limit, this also spreads usage across quotas.
+`LLM_MODEL_REVIEWER` override `LLM_MODEL`. On Groq, where each model has its own daily limit,
+this spreads usage across quotas. In real runs the smaller model planned well, but as Checker
+it wandered and as Reviewer it approved too easily, so the live site uses it only for the
+Concierge and the Planner.
 
 **Observable by default.** Every agent run writes its own JSONL trace. The orchestrator writes
 a trace of phase transitions and a `runs/<id>.state.json` snapshot of the whole state (plan,
@@ -197,7 +211,11 @@ project to fix.
 **Public mode** (`RELAY_PUBLIC=1`, used by `deploy/render/Dockerfile`, set up with `docs/DEPLOY.md`):
 
 - People sign in with an invite code (`INVITES`, one per email, made by `deploy/deploy.py`;
-  wrong codes are throttled per address) or with Google for emails in `ALLOWED_EMAILS`.
+  wrong codes are throttled per address) or with Google for emails in `ALLOWED_EMAILS`, and
+  anyone else can try it for a day as a guest.
+- Everything past the sign-in page needs a signed-in person, and every response carries the
+  security headers from `web/security.py` (a script policy listing only Relay's own scripts,
+  HSTS, no framing by other sites, and more).
 - The AI key is read once into the provider client and removed from the environment; the
   process is made non-dumpable so other processes of the same user cannot read
   `/proc/<pid>/environ`.
@@ -209,6 +227,32 @@ project to fix.
 - The playground is switched off; job folders and agent traces are deleted when a job ends.
 - With `KEEP_AWAKE_URL` set, the worker visits the site's own public address every 10 minutes,
   because free hosts put a service to sleep after a period without visits.
+
+## What real use taught us
+
+The tests use a scripted fake model, which proves the plumbing but not the experience. So the
+assistant was also run by hand with the real model, as a person would use it, asking for "the
+top tech news stories today, 5 with links". The first four attempts each failed in a new way,
+and each failure became a fix with a test:
+
+| What happened | Why | What changed |
+|---|---|---|
+| The job failed after the Checker; the finished briefing was thrown away | The model sent Python code where the tool needed JSON; the provider rejected the whole reply | Retries now show the exact JSON shape; finished work is delivered with an honest note |
+| The Checker kept failing the same way | Checking facts doesn't need code | The assist Checker uses `find_text` (plain words, many at once) instead of `run_python` |
+| The "tech news" was general news | The Concierge didn't fill in the topic | Topics are required in its instructions, with a fallback that reads them from the title |
+| A raw error appeared on screen | The smaller model left out the title, which the schema required | The title is optional and filled in; people only ever see plain sentences |
+| The Checker ran out of steps without reporting | It reread whole files and tried to verify long links character by character | Line ranges in `read_file`, links aren't rechecked, and the last step must be the report |
+
+The fifth run went through cleanly: all four robots finished, every check passed, and the
+Reviewer's note became the notification. A file job (notes to flashcards), a reminder, a
+weekday news routine, and a page watcher then worked first time.
+
+## The free day and security
+
+People without an invite can try Relay for 24 hours (`assistant/trial.py`), with their own
+small allowance, no Gmail or Calendar, and their data deleted when the day ends. The
+protective layer of the website (headers, limits, the real client address) is in
+`web/security.py`. Both are explained, risk by risk, in [SECURITY.md](SECURITY.md).
 
 ## Measuring what each part adds
 
@@ -227,6 +271,8 @@ Reviewer contribute and what they cost.
 | `orchestrator.py` | The state machine described above |
 | `doctor.py` | Checks the provider, key, and whether a model can make tool calls |
 | `web/` | The Relay web app, its live event stream, and replays |
+| `web/security.py` | Security headers with a strict script policy, request size limit, rate limits, the real client address |
+| `assistant/trial.py` | The free day: who may have one, their allowance, and the clean-up afterwards |
 | `evals/rescore.py` | Re-judges finished runs from their traces after a task's tests are corrected |
 | `evals/run_evals.py` | Runs either mode on the benchmark and judges results with its own test run |
 

@@ -1,4 +1,6 @@
-"""Tools the agent can use, and the code that runs them."""
+"""The tools agents can use (read, write, and search files, run tests or a short script),
+and the code that runs them safely: every path stays inside the job's folder, protected files
+can't be changed, and model-written code runs in a sandbox (see sandbox_mode)."""
 import difflib
 import json
 import os
@@ -51,9 +53,30 @@ TOOL_SCHEMAS = [
                     "path": {
                         "type": "string",
                         "description": "Path relative to the project root, e.g. 'calculator.py'",
-                    }
+                    },
+                    "start_line": {"type": "integer", "description": "Optional: first line to read (1-based)"},
+                    "end_line": {"type": "integer", "description": "Optional: last line to read"},
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_text",
+            "description": (
+                "Search the files for some words (not case-sensitive) and list every line that "
+                "contains them, as path:line: text. Look up several things at once by separating "
+                "them with ' | '. Use it to check that facts really appear in inputs/."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The words to look for, e.g. 'Dawn' or '18 percent'"},
+                    "path": {"type": "string", "description": "Optional: only search this file or folder, e.g. 'inputs'"},
+                },
+                "required": ["text"],
             },
         },
     },
@@ -284,14 +307,52 @@ def list_files(root: Path) -> str:
     return "\n".join(sorted(files)) or "(no files)"
 
 
-def read_file(root: Path, path: str) -> str:
+def read_file(root: Path, path: str, start: int | None = None, end: int | None = None) -> str:
     target = _safe_path(root, path)
     if not target.is_file():
         raise ToolError(f"{path} does not exist.")
     text = target.read_text(encoding="utf-8", errors="replace")
+    if start or end:  # just some lines, numbered, so rereading a long file stays cheap
+        lines = text.splitlines()
+        first = max(1, int(start or 1))
+        last = min(len(lines), int(end or len(lines)))
+        text = "\n".join(f"{n}: {lines[n - 1]}" for n in range(first, last + 1)) or "(no lines in that range)"
     if len(text) > MAX_READ_CHARS:
         text = text[:MAX_READ_CHARS] + "\n... (truncated)"
     return text or "(file is empty)"
+
+
+MAX_FIND_RESULTS = 40
+
+
+def find_text(root: Path, text: str, path: str = "") -> str:
+    """Every line containing the words, so a checker can confirm facts without writing code.
+    Several phrases separated by ' | ' are looked up in one go, each under its own heading."""
+    phrases = [p.strip()[:300] for p in text.split("|") if p.strip()][:12]
+    if not phrases:
+        raise ToolError("Give some words to look for.")
+    base = _safe_path(root, path) if path.strip() else root
+    if not base.exists():
+        raise ToolError(f"{path} does not exist.")
+    files = [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file())
+    texts = []
+    for file in files:
+        rel = file.relative_to(root)
+        if file.name in BLOCKED_FILES or any(part in SKIP_DIRS for part in rel.parts):
+            continue
+        try:
+            texts.append((rel.as_posix(), file.read_text(encoding="utf-8", errors="replace").splitlines()))
+        except OSError:
+            continue
+    report = []
+    for phrase in phrases:
+        needle = phrase.lower()
+        hits = [f"{rel}:{n}: {line.strip()[:200]}" for rel, lines in texts
+                for n, line in enumerate(lines, 1) if needle in line.lower()]
+        shown = hits[:MAX_FIND_RESULTS] + (["... (more matches not shown)"] if len(hits) > MAX_FIND_RESULTS else [])
+        body = "\n".join(shown) or f"No line contains '{phrase}'."
+        report.append(body if len(phrases) == 1 else f"## {phrase}\n{body}")
+    return "\n\n".join(report)
 
 
 def write_file(root: Path, path: str, content: str) -> str:
@@ -391,9 +452,20 @@ def show_diff(root: Path, baseline: Path | None) -> str:
 
 # ---------- dispatch ----------
 
+def _line(args: dict, *names: str) -> int | None:
+    """A line number from the arguments, under either spelling models tend to use."""
+    for name in names:
+        value = args.get(name)
+        if isinstance(value, int | float | str) and str(value).strip().isdigit():
+            return int(value)
+    return None
+
+
 HANDLERS = {
     "list_files": lambda ctx, args: list_files(ctx.root),
-    "read_file": lambda ctx, args: read_file(ctx.root, str(args["path"])),
+    "read_file": lambda ctx, args: read_file(ctx.root, str(args["path"]), _line(args, "start_line", "line_start"),
+                                             _line(args, "end_line", "line_end")),
+    "find_text": lambda ctx, args: find_text(ctx.root, str(args["text"]), str(args.get("path") or "")),
     "write_file": lambda ctx, args: write_file(ctx.root, str(args["path"]), str(args["content"])),
     "run_tests": lambda ctx, args: run_tests(ctx.root),
     "run_python": lambda ctx, args: run_python(ctx.root, str(args["code"])),

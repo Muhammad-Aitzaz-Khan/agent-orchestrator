@@ -6,25 +6,34 @@ browser change anything (a simple CSRF defence on top of SameSite cookies).
 """
 import asyncio
 import json
+import logging
 import os
+import re
 import secrets
 import time
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from orchestrator.assistant import concierge, google, push
+from orchestrator.assistant import concierge, google, push, trial
 from orchestrator.assistant import schedule as sched
 from orchestrator.assistant.runner import allowance_left
 from orchestrator.assistant.skills import SKILLS, SUGGESTIONS
 from orchestrator.assistant.store import Store, now
 from orchestrator.assistant.worker import Worker
+from orchestrator.web.security import RateLimit, client_ip
+
+log = logging.getLogger("relay")
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_UPLOADS = 40
+GUEST_MAX_UPLOADS = 5
+# The web-push services browsers use (Chrome/Edge, Firefox, Safari, Windows).
+PUSH_HOSTS = ("fcm.googleapis.com", "push.services.mozilla.com", "push.apple.com", "notify.windows.com")
 UPLOAD_TYPES = (".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".html", ".htm", ".py", ".js",
                 ".ts", ".java", ".c", ".cpp", ".h", ".tex", ".rtf", ".xml", ".yaml", ".yml")
 LOCAL_EMAIL = "you@this-computer"
@@ -64,6 +73,10 @@ class Throttle:
         self.fails.setdefault(key, []).append(time.monotonic())
 
 
+class TrialBody(BaseModel):
+    website: str = Field(default="", max_length=200)  # a field people never see: bots fill it in
+
+
 class AskBody(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     history: list[dict] = Field(default_factory=list, max_length=12)
@@ -89,6 +102,12 @@ class MePatch(BaseModel):
 class PushBody(BaseModel):
     endpoint: str = Field(max_length=2000)
     keys: dict
+
+
+def _safe_filename(name: str) -> str:
+    """A download name with nothing that could break out of the header (quotes, new lines)."""
+    cleaned = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(name).name).strip(" .")
+    return cleaned[:100] if cleaned.strip("_ .") else "result.txt"
 
 
 def _job_view(job: dict, full: bool = False) -> dict:
@@ -120,7 +139,11 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     def current_user(request: Request) -> dict | None:
         uid = request.session.get("uid")
         if uid:
-            return store.user(uid)
+            user = store.user(uid)
+            if user is not None and not trial.expired(user):
+                return user
+            request.session.pop("uid", None)  # a free day that ended, or a deleted account
+            request.state.trial_over = user is not None
         if local_mode:  # one person on their own computer: no sign-in needed
             user = store.upsert_user(LOCAL_EMAIL, os.getenv("RELAY_LOCAL_NAME", "you"))
             request.session["uid"] = user["id"]
@@ -152,6 +175,8 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.get("/auth/connect/{provider}")
     def connect(provider: str, request: Request):
         user = need_user(request)
+        if trial.is_guest(user):
+            raise HTTPException(403, "Gmail and Calendar need an invite; they aren't part of the free day.")
         if provider not in ("gmail", "calendar"):
             raise HTTPException(404, "Unknown connection.")
         if not google.configured():
@@ -188,12 +213,15 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         return RedirectResponse(f"/?connected={purpose}", 303)
 
     throttle = Throttle()
+    trial_limit = RateLimit(limit=5, window=3600)       # free-day attempts per address per hour
+    ask_limit = RateLimit(limit=20, window=600)         # Concierge questions per person per 10 minutes
+    upload_limit = RateLimit(limit=30, window=3600)     # uploads per person per hour
+    push_limit = RateLimit(limit=5, window=600)         # test notifications per person per 10 minutes
 
     @router.post("/auth/invite", dependencies=[Depends(same_site)])
     def invite_sign_in(body: InviteBody, request: Request):
         """Sign in with an invite code from INVITES (no Google account needed)."""
-        who = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
-            request.client.host if request.client else "?")
+        who = client_ip(request, public)
         if throttle.blocked(who):
             raise HTTPException(429, "Too many tries. Wait 15 minutes and try again.")
         email = body.email.strip().lower()
@@ -202,13 +230,36 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
             throttle.fail(who)
             raise HTTPException(401, "That email and invite code don't match.")
         user = store.upsert_user(email, email.split("@")[0].replace(".", " ").title())
+        request.session.clear()  # a fresh session on every sign-in (no session fixation)
         request.session["uid"] = user["id"]
         return {"ok": True}
+
+    @router.post("/auth/trial", dependencies=[Depends(same_site)])
+    def start_trial(body: TrialBody, request: Request):
+        """Try it out: one free day as a guest, no email or code (see assistant/trial.py)."""
+        if not trial.enabled(public):
+            raise HTTPException(404, "Free days aren't offered here.")
+        if body.website:
+            raise HTTPException(400, "Something went wrong. Try again.")
+        network = client_ip(request, public)
+        trial_limit.hit(network, "Too many tries. Wait an hour and try again.")
+        try:
+            user, token = trial.start(store, network, request.cookies.get(trial.BROWSER_COOKIE))
+        except trial.TrialRefused as e:
+            raise HTTPException(403, str(e)) from e
+        request.session.clear()
+        request.session["uid"] = user["id"]
+        response = JSONResponse({"ok": True, "until": (user["prefs"] or {}).get("trial_until")})
+        response.set_cookie(trial.BROWSER_COOKIE, token, max_age=400 * 24 * 3600, httponly=True,
+                            secure=public, samesite="lax")
+        return response
 
     @router.post("/auth/logout", dependencies=[Depends(same_site)])
     def logout(request: Request):
         request.session.clear()
-        return {"ok": True}
+        # Ask the browser to forget cached pages too. Not "cookies": that would also wipe the
+        # cookie that says this browser already had its free day.
+        return JSONResponse({"ok": True}, headers={"Clear-Site-Data": '"cache"'})
 
     @router.post("/api/connections/{provider}/disconnect", dependencies=[Depends(same_site)])
     def disconnect(provider: str, request: Request):
@@ -222,10 +273,15 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         user = current_user(request)
         if user is None:
             return {"signed_in": False, "google": google.configured(), "local": local_mode,
-                    "invites": bool(invites())}
+                    "invites": bool(invites()), "trial": trial.enabled(public), "trial_hours": trial.hours(),
+                    "trial_used": bool(request.cookies.get(trial.BROWSER_COOKIE)),
+                    "trial_over": bool(getattr(request.state, "trial_over", False))}
         connected = store.connections_for(user["id"])
+        guest = trial.is_guest(user)
+        until = trial.ends_at(user)
         return {
-            "signed_in": True, "local": local_mode, "google": google.configured(),
+            "signed_in": True, "local": local_mode, "google": google.configured() and not guest,
+            "guest": guest, "trial_until": until.isoformat() if until else None,
             "user": {"name": user["name"], "email": user["email"], "picture": user["picture"],
                      "tz": user["tz"], "prefs": user["prefs"] or {}},
             "connections": connected, "push_key": push.public_key(),
@@ -262,6 +318,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.post("/api/ask", dependencies=[Depends(same_site)])
     def ask(body: AskBody, request: Request):
         user = need_user(request)
+        ask_limit.hit(user["id"], "That's a lot of questions in a few minutes. Take a short break and try again.")
         client = worker.client()
         if client is None:
             raise HTTPException(503, "The AI is not set up on this server yet.")
@@ -276,7 +333,11 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
                                              model=(worker.models or {}).get("concierge")
                                              or os.getenv("LLM_MODEL_CONCIERGE"))
         except concierge.ProposalError as e:
-            raise HTTPException(422, f"Sorry, I could not work that out ({e}). Could you say it another way?") from e
+            # The details are for the logs; the person gets a plain sentence.
+            log.warning("the Concierge could not make a proposal: %s", str(e)[:500])
+            busy = any(w in str(e).lower() for w in ("rate limit", "503", "overloaded", "timeout", "connection"))
+            raise HTTPException(422, "The AI is busy right now. Try again in a minute." if busy else
+                                "Sorry, I didn't quite get that. Could you say it another way?") from e
         store.add_usage(user["id"], tokens)
         return proposal
 
@@ -371,7 +432,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         if job is None or name not in (job["files"] or {}):
             raise HTTPException(404, "No such file.")
         return Response((job["files"][name]).encode("utf-8"), media_type="text/plain; charset=utf-8",
-                        headers={"Content-Disposition": f'attachment; filename="{Path(name).name}"'})
+                        headers={"Content-Disposition": f'attachment; filename="{_safe_filename(name)}"'})
 
     # ---------- routines ----------
 
@@ -421,14 +482,16 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.post("/api/uploads", dependencies=[Depends(same_site)])
     async def upload(request: Request, file: Annotated[UploadFile, File()]):
         user = await asyncio.to_thread(need_user, request)
+        upload_limit.hit(user["id"], "That's a lot of uploads. Wait a little and try again.")
         name = Path(file.filename or "file").name
         if not name.lower().endswith(UPLOAD_TYPES):
             raise HTTPException(400, "This kind of file is not supported yet. Try PDF, Word, or text.")
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(400, "Files can be up to 10 MB.")
-        if len(await asyncio.to_thread(store.uploads_for, user["id"])) >= MAX_UPLOADS:
-            raise HTTPException(400, f"You can keep up to {MAX_UPLOADS} files. Delete one first.")
+        most = GUEST_MAX_UPLOADS if trial.is_guest(user) else MAX_UPLOADS
+        if len(await asyncio.to_thread(store.uploads_for, user["id"])) >= most:
+            raise HTTPException(400, f"You can keep up to {most} files. Delete one first.")
         return await asyncio.to_thread(store.add_upload, user["id"], name, file.content_type or "", data)
 
     @router.get("/api/uploads")
@@ -446,7 +509,11 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.post("/api/push/subscribe", dependencies=[Depends(same_site)])
     def subscribe(body: PushBody, request: Request):
         user = need_user(request)
-        if not body.endpoint.startswith("https://") or not {"p256dh", "auth"} <= set(body.keys):
+        # Only real push services: the server sends requests to this address, so anything else
+        # could point it at places it should never reach (SSRF).
+        host = (urlparse(body.endpoint).hostname or "").lower()
+        if (not body.endpoint.startswith("https://") or not {"p256dh", "auth"} <= set(body.keys)
+                or not any(host == h or host.endswith("." + h) for h in PUSH_HOSTS)):
             raise HTTPException(400, "That subscription is not valid.")
         store.add_push(user["id"], body.endpoint, {"p256dh": body.keys["p256dh"], "auth": body.keys["auth"]})
         return {"ok": True}
@@ -454,6 +521,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.post("/api/push/test", dependencies=[Depends(same_site)])
     def test_push(request: Request):
         user = need_user(request)
+        push_limit.hit(user["id"])
         sent = push.send(store, user["id"], "Notifications are on",
                          "This is how Relay will tell you when something is ready.", url="/")
         return {"sent": sent}

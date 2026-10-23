@@ -1,1 +1,1 @@
-"""Relay: a web interface for watching the four-agent team work."""
+"""The Relay website: the assistant itself, the robot office, and signing in."""

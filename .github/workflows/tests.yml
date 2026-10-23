@@ -1,0 +1,19 @@
+# Runs the whole test suite and the linter on every push and pull request.
+# None of the tests call a real AI service, so no keys are needed here.
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -c deploy/render/constraints.txt -e ".[web]" pytest ruff
+      - run: ruff check src tests deploy evals
+      - run: pytest -q

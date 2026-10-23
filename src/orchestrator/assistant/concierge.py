@@ -31,7 +31,7 @@ class Proposal(BaseModel):
         description="job = do it now; routine = repeat on a schedule; reminder = notify at a time; "
                     "question = ask one short question because something essential is missing")
     skill: str = Field(description="one skill key from the catalogue")
-    title: str = Field(description="short title, at most 6 words, e.g. 'Morning tech news'")
+    title: str = Field(default="", description="short title, at most 6 words, e.g. 'Morning tech news'")
     instructions: str = Field(
         default="",
         description="complete, self-contained instructions for the team that will do the work, "
@@ -49,7 +49,7 @@ class Proposal(BaseModel):
     schedule: ScheduleSpec | None = None
     question: str = Field(default="", description="when action is question: the one question")
     message: str = Field(description="one or two warm, plain sentences to the person saying what "
-                                     "you set up or will do (or the question)")
+                                     "the team will do once they confirm (or the question)")
 
 
 CONCIERGE_PROMPT = """You are the CONCIERGE of Relay, a personal assistant run by a small team of AI
@@ -70,10 +70,16 @@ Rules:
   Days are numbers, 0 = Monday. For a one-time time use schedule.once in local time.
 - instructions must stand on their own: a teammate reading only them must know exactly what
   to produce, for whom, in what format and length, and with which preferences.
+- Fill params with the skill's settings from what they said (the catalogue lists them). For
+  news and morning_brief, topics must name the subjects they mentioned: "tech news" means
+  ["technology"], "cricket and Pakistan" means ["cricket", "Pakistan"]. Leave topics empty only
+  when they named no subject at all.
 - Never promise to send emails or messages for the person: Relay only reads and drafts.
 - If a skill needs a connection the person has not made, still propose it; the app will ask
   them to connect.
-- message speaks to the person directly, warmly and briefly. No technical words."""
+- message speaks to the person directly, warmly and briefly. No technical words. Nothing has
+  happened yet when you write it (they still have to confirm), so say what the team WILL do,
+  e.g. "I'll have the team pull together today's top five tech stories." Never "I've prepared"."""
 
 CONCIERGE = Role(
     name="concierge",
@@ -137,6 +143,15 @@ def normalise(raw: dict, attached: list[str]) -> dict:
             schedule = sched.validate({k: v for k, v in spec.items() if v not in (None, "", [])})
         except (ValueError, TypeError) as e:
             raise ProposalError(f"could not understand the schedule: {e}") from e
+    # The smaller model sometimes leaves the title out; a plain one beats an error.
+    if not p.title.strip():
+        if p.skill == "reminder" and p.text.strip():
+            p.title = p.text.strip()
+        elif p.skill in ("news", "morning_brief") and p.topics:
+            p.title = " and ".join(t.strip() for t in p.topics[:3]) + (" news" if p.skill == "news" else " brief")
+        else:
+            p.title = skill.title
+    p.title = p.title.strip()[:1].upper() + p.title.strip()[1:]
     if p.skill == "reminder" and not params.get("text"):
         params["text"] = p.title
     if p.skill == "web_watch" and not params.get("url"):

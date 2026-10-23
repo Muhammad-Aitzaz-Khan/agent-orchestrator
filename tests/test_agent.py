@@ -190,7 +190,7 @@ def test_malformed_tool_call_retry_explains_the_problem(in_tmp):
     client = FakeClient([bad_request(TOOL_VALIDATION), completion(content="done")])
     run(client, root=in_tmp)
     retry_messages = client.requests[1]["messages"]
-    assert "rejected because a tool call was malformed" in retry_messages[-1]["content"]
+    assert "Your last tool call was rejected" in retry_messages[-1]["content"]
     assert len(client.requests[0]["messages"]) == 2  # the note is not added to the history
     assert len(retry_messages) == 3
 
@@ -225,3 +225,22 @@ def test_role_is_warned_before_running_out_of_steps(in_tmp):
     warned = [r for r in client.requests if "steps left" in str(r["messages"][-1].get("content"))]
     assert len(warned) == 1  # sent once, after step 2 of 4
     assert client.requests.index(warned[0]) == 2
+
+
+def test_a_tool_call_that_is_not_json_gets_an_example_of_the_right_shape(in_tmp):
+    not_json = bad_request("Failed to parse tool call arguments as JSON (tool_use_failed)")
+    client = FakeClient([not_json, completion(content="done")])
+    run(client, root=in_tmp)
+    note = client.requests[1]["messages"][-1]["content"]
+    assert "one JSON object" in note and '{"code":' in note
+
+
+def test_the_last_step_must_be_the_submission(in_tmp):
+    from orchestrator.roles import TEAMS
+    role = TEAMS["assist"][2]
+    looking = completion(tool_calls=[("list_files", {})])
+    client = FakeClient([looking] * (role.max_steps - 1) + [completion(content="ok")])
+    run_agent("check it", root=in_tmp, client=client, sleep=lambda s: None, role=role,
+              max_steps=role.max_steps, runs_dir=in_tmp / "runs")
+    assert client.requests[-1]["tool_choice"]["function"]["name"] == role.submit_tool
+    assert "tool_choice" not in client.requests[0]
