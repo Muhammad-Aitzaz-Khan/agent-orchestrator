@@ -716,7 +716,10 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
    focus inside could scroll the box sideways and hide its content. */
 .deck, .tone-band, .btn, .icon-btn, .idea, .pick, .tab, .use, .stat, .plan, .routine, .invite, .toast, .hero-art { overflow: clip; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* the front-page diagram stays still too, unless the visitor presses its Play button */
+  *:not(.trip.watching *), *:not(.trip.watching *)::before, *:not(.trip.watching *)::after {
+    animation: none !important; transition: none !important;
+  }
   .reveal { opacity: 1; transform: none; }
 }
 </style>
@@ -1752,7 +1755,11 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   function agentFlow() {
     const holder = h("div", { class: "flow-stage" });
     const bar = h("span");
-    const pauseBtn = h("button", { type: "button", class: "icon-btn", "aria-label": "Pause the animation", onclick: () => setPaused(!paused) }, icon("pause"));
+    // With "reduce motion" on, the diagram starts as a still picture and plays only if asked to.
+    let watching = !reduced();
+    const pauseBtn = h("button", { type: "button", class: "icon-btn", "aria-label": watching ? "Pause the animation" : "Play the animation",
+      onclick: () => { if (watching) return setPaused(!paused); watching = true; fig.classList.add("watching"); setPaused(false); restart(); } },
+      icon(watching ? "pause" : "play"));
     const chips = FLOW_SCENES.map((sc, i) => h("button", { type: "button", class: "flow-chip", "aria-pressed": "false", onclick: () => { scene = i; if (paused) setPaused(false); restart(); } }, sc.tag));
     const fig = h("figure", { class: "trip" }, holder, h("div", { class: "flow-progress", "aria-hidden": "true" }, bar),
       h("div", { class: "flow-bar" }, pauseBtn, h("div", { class: "flow-bar", role: "group", "aria-label": "Example requests" }, ...chips)),
@@ -1884,7 +1891,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       notify(sc.done);
     }
     async function run(t) {
-      if (reduced()) { still(FLOW_SCENES[scene]); return; }
+      if (!watching) { still(FLOW_SCENES[scene]); return; }
       try { for (;;) { await play(t, FLOW_SCENES[scene]); scene = (scene + 1) % FLOW_SCENES.length; } }
       catch (e) { if (e !== STOP) throw e; }
     }
@@ -1894,7 +1901,6 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       anims.clear();
       if (v) run(token);
     }
-    pauseBtn.hidden = reduced();
     // Built when it first gets a size; a phone gets a narrower layout with the same text size.
     new ResizeObserver(() => {
       const width = holder.clientWidth; if (!width) return;
