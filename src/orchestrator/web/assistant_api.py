@@ -251,8 +251,9 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         return {"ok": True}
 
     @router.get("/api/demo-recordings")
-    def demo_recordings():
+    def demo_recordings(request: Request):
         """Recorded runs, so the office has something to show before your first job."""
+        need_user(request)
         from orchestrator.web.site import load_recordings
         return load_recordings()
 

@@ -40,8 +40,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
@@ -207,13 +213,29 @@ def create_app(
     def active_live_run() -> WebRun | None:
         return next((r for r in runs.values() if not r.done and not r.replay), None)
 
+    # On a public server only signed-in people see anything beyond the sign-in page: the
+    # office, the recordings, and every API behind them. (Locally you are always signed in.)
+    def signed_in(request: Request) -> bool:
+        uid = request.session.get("uid")
+        return bool(uid) and store.user(uid) is not None
+
+    def members_only(request: Request) -> None:
+        if public and not signed_in(request):
+            raise HTTPException(401, "Please sign in.")
+
+    def members_page(request: Request) -> RedirectResponse | None:
+        if public and not signed_in(request):
+            return RedirectResponse("/", 303)
+        return None
+
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "app.html", headers={"Cache-Control": "no-cache"})
 
     @app.get("/demo", response_class=HTMLResponse)
-    def demo() -> str:
-        return render_page(live=not public, recordings=load_recordings(replays_dir))
+    def demo(request: Request):
+        return members_page(request) or HTMLResponse(
+            render_page(live=not public, recordings=load_recordings(replays_dir)))
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -221,9 +243,14 @@ def create_app(
         return {"ok": True}
 
     @app.get("/office", response_class=HTMLResponse)
-    def office() -> str:
+    def office(request: Request):
         """The office alone, for "Show agents working" inside the assistant."""
-        return render_page(live=False, recordings=[], embed=True)
+        return members_page(request) or HTMLResponse(render_page(live=False, recordings=[], embed=True))
+
+    @app.get("/static/relay.html")
+    def office_template() -> None:
+        """The office's raw template is served only through /office and /demo."""
+        raise HTTPException(404, "Not found.")
 
     @app.get("/sw.js")
     def service_worker() -> FileResponse:
@@ -241,7 +268,7 @@ def create_app(
             raise HTTPException(404, "No such icon.")
         return FileResponse(path, media_type="image/png")
 
-    @app.get("/api/status")
+    @app.get("/api/status", dependencies=[Depends(members_only)])
     def status() -> dict:
         active = active_live_run()
         return {
@@ -252,11 +279,11 @@ def create_app(
             "active_run": active.id if active else None,
         }
 
-    @app.get("/api/examples")
+    @app.get("/api/examples", dependencies=[Depends(members_only)])
     def examples() -> dict:
         return {"create": CREATE_EXAMPLES, "fix": fix_samples()}
 
-    @app.get("/api/replays")
+    @app.get("/api/replays", dependencies=[Depends(members_only)])
     def replays() -> list[dict]:
         found = []
         for path in sorted(replays_dir.glob("*.jsonl")):
@@ -269,7 +296,7 @@ def create_app(
             })
         return found
 
-    @app.post("/api/runs")
+    @app.post("/api/runs", dependencies=[Depends(members_only)])
     def start_run(body: StartRun) -> dict:
         if public:  # the open playground is only for your own computer
             raise HTTPException(404, "Not available here. Sign in and ask the assistant instead.")
@@ -303,7 +330,7 @@ def create_app(
         threading.Thread(target=work, daemon=True).start()
         return {"id": run_id}
 
-    @app.post("/api/replays/{name}")
+    @app.post("/api/replays/{name}", dependencies=[Depends(members_only)])
     def start_replay(name: str) -> dict:
         path = replays_dir / f"{name}.jsonl"
         if not re.fullmatch(r"[\w-]+", name) or not path.is_file():
@@ -326,7 +353,7 @@ def create_app(
         threading.Thread(target=play, daemon=True).start()
         return {"id": run.id}
 
-    @app.get("/api/runs/{run_id}/events")
+    @app.get("/api/runs/{run_id}/events", dependencies=[Depends(members_only)])
     async def events(run_id: str) -> StreamingResponse:
         run = runs.get(run_id)
         if run is None:

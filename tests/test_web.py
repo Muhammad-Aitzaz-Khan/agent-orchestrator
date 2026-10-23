@@ -140,21 +140,61 @@ def test_page_embeds_the_recordings_safely():
     assert "</script>" not in _script_json({"text": "</script><script>alert(1)</script>"})
 
 
-def test_public_mode_hides_the_key_and_closes_the_playground(tmp_path, monkeypatch):
-    import os
-
+def _public_client(tmp_path, monkeypatch, made=None):
     from orchestrator.assistant.store import Store
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("GROQ_API_KEY", "server-key")
+    monkeypatch.setenv("INVITES", "me@example.com=ABCD-EFGH-JKLM")
     monkeypatch.delenv("SANDBOX", raising=False)
     monkeypatch.delenv("RELAY_GUARD_DENY", raising=False)
     monkeypatch.setattr("orchestrator.web.app.load_dotenv", lambda: None)
+    made = [] if made is None else made
+    app = create_app(public=True, start_worker=False, store=Store(f"sqlite:///{tmp_path}/r.db"),
+                     client_factory=lambda: made.append(1) or object())
+    return TestClient(app, base_url="https://testserver")  # the session cookie is https-only
+
+
+def _sign_in(client):
+    r = client.post("/auth/invite", json={"email": "me@example.com", "code": "ABCD-EFGH-JKLM"},
+                    headers={"X-Relay": "1"})
+    assert r.status_code == 200
+
+
+def test_public_mode_hides_the_key_and_closes_the_playground(tmp_path, monkeypatch):
+    import os
+
     made = []
-    client = TestClient(create_app(public=True, start_worker=False, store=Store(f"sqlite:///{tmp_path}/r.db"),
-                                   client_factory=lambda: made.append(1) or object()))
+    client = _public_client(tmp_path, monkeypatch, made)
     assert "GROQ_API_KEY" not in os.environ and made == [1]  # read once, then removed
+    _sign_in(client)
     status = client.get("/api/status").json()
     assert status["public"] and status["api_key_configured"] and status["sandbox"] == "guarded"
     assert client.post("/api/runs", json={"prompt": "x", "kind": "create"}).status_code == 404
 
+
+def test_public_mode_shows_nothing_but_sign_in_to_strangers(tmp_path, monkeypatch):
+    client = _public_client(tmp_path, monkeypatch)
+    for path in ("/demo", "/office"):
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/", path
+    for method, path in (("GET", "/api/status"), ("GET", "/api/examples"), ("GET", "/api/replays"),
+                         ("POST", "/api/replays/fix_word_stats"), ("GET", "/api/runs/abc/events"),
+                         ("GET", "/api/demo-recordings"), ("GET", "/api/jobs"), ("GET", "/api/routines"),
+                         ("GET", "/api/uploads")):
+        assert client.request(method, path, headers={"X-Relay": "1"}).status_code == 401, path
+    assert client.get("/static/relay.html").status_code == 404
+    assert client.get("/api/me").json()["signed_in"] is False
+    assert client.get("/healthz").json() == {"ok": True}
+
+    _sign_in(client)
+    assert client.get("/office").status_code == 200 and client.get("/demo").status_code == 200
+    assert client.get("/api/replays").status_code == 200
+    assert client.get("/api/demo-recordings").status_code == 200
+
+
+def test_the_sign_in_page_links_nowhere_past_sign_in():
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1] / "src/orchestrator/web/static/app.html").read_text(encoding="utf-8")
+    assert '"/demo"' not in page and '"/office"' not in page.replace('src = "/office"', "").replace('src: "/office"', "")

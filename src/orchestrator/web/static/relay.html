@@ -1,5 +1,11 @@
 <title>Relay</title>
 <meta name="description" content="Ask a team of four AI robots to do anything, and watch them plan, make, check, and review it together.">
+<script>
+  // Same lighting as the rest of Relay: your choice if you made one, else your device's.
+  (() => { let t = null; try { t = localStorage.getItem("relay-theme"); } catch {}
+    const sys = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : sys; })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -30,8 +36,27 @@
   --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
   --body: "Archivo", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+  --you: #3a3222;
+  --ok-bg: #2c4a3a; --no-bg: #4a2c2c;
+  /* the office scene (screens, consoles and robots look the same in both themes) */
+  --o-wall: #1c2730; --o-ceiling: #141c23; --o-floor: #161f27; --o-floor-line: #1b252e; --o-skirt: #121a20;
+  --o-cord: #0f151a; --o-sky-1: #0d1830; --o-sky-2: #28324a; --o-bldg: #111a28; --o-bldg-win: #e8c76f;
+  --o-frame: #2b3944; --o-label: #a7b0b6; --o-chair: #1e2830; --o-chair-edge: #2f3b45; --o-shadow: #10171d;
+  --o-shade: #2f3d47; --o-bulb-off: #3a464f; --o-cone: 0.55;
   color-scheme: dark;
 }
+/* Daylight: the same office with the blinds up. */
+:root[data-theme="light"] {
+  --night: #f3f1ec; --wall: #e6e8ea; --floor: #d8d2c6; --panel: #ffffff; --panel-2: #efece5; --line: #d8d2c6;
+  --ink: #1b222a; --muted: #56616b; --dim: #7b848c; --good: #2f9a62; --bad: #cc4b3f;
+  --you: #fbe9c8; --ok-bg: #d7f0e2; --no-bg: #f8dcd8;
+  --o-wall: #e3e7ea; --o-ceiling: #d3d9de; --o-floor: #d6cfc2; --o-floor-line: #cbc3b4; --o-skirt: #b9b1a2;
+  --o-cord: #9aa5ae; --o-sky-1: #8ec5ec; --o-sky-2: #d8eef9; --o-bldg: #9fb3c4; --o-bldg-win: #e9f3fa;
+  --o-frame: #f7f8f9; --o-label: #4d5862; --o-chair: #c3cbd2; --o-chair-edge: #a9b3bb; --o-shadow: #c2baab;
+  --o-shade: #5c6a75; --o-bulb-off: #8b98a2; --o-cone: 0.32;
+  color-scheme: light;
+}
+body, .panel, .job, .ask, .btn, .tab, .bubble-msg, .topbar { transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease; }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -110,6 +135,18 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .bubble { transition: opacity 250ms ease; }
 .screen-text { transition: opacity 200ms ease; }
 .stage.no-anim * { transition: none !important; }
+.stage .robot { transform-box: fill-box; }
+.stage .robot.active { animation: hover-bob 2.4s ease-in-out infinite; }
+@keyframes hover-bob { 50% { transform: translateY(-4px); } }
+.stage .cone { mix-blend-mode: screen; }
+:root[data-theme="light"] .stage .cone { mix-blend-mode: multiply; }
+.stage .bldg-win { animation: twinkle 6s ease-in-out infinite; }
+@keyframes twinkle { 50% { opacity: 0.35; } }
+.feed li { animation: feed-in 0.45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes feed-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+.checks li { animation: feed-in 0.4s ease-out both; }
+.badge-live { animation: live 1.6s ease-in-out infinite; }
+@keyframes live { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--bad) 25%, transparent); } }
 
 /* ---------- player ---------- */
 .player { display: flex; align-items: center; gap: 12px; padding: 10px 2px; flex-wrap: wrap; }
@@ -145,9 +182,9 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .from { font-size: 0.8rem; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .from strong { color: var(--ink); }
 .badge { font-size: 0.72rem; font-weight: 700; padding: 0 8px; border-radius: 999px; }
-.badge.ok { background: #2c4a3a; color: var(--good); } .badge.no { background: #4a2c2c; color: var(--bad); }
+.badge.ok { background: var(--ok-bg); color: var(--good); } .badge.no { background: var(--no-bg); color: var(--bad); }
 .feed .you { display: flex; justify-content: flex-end; }
-.bubble-you { background: #3a3222; border-radius: 12px 4px 12px 12px; padding: 8px 12px; max-width: 88%; display: grid; gap: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble-you { background: var(--you); border-radius: 12px 4px 12px 12px; padding: 8px 12px; max-width: 88%; display: grid; gap: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .feed .acts { color: var(--dim); font-size: 0.84rem; padding-left: 42px; }
 .feed .sys { text-align: center; font-size: 0.86rem; color: var(--muted); }
 .feed .sys.tone-good { color: var(--good); } .feed .sys.tone-bad { color: var(--bad); }
@@ -405,7 +442,10 @@ window.RELAY_EMBED = /*EMBED*/false;
   // ---------- small helpers ----------
   function svg(tag, attrs = {}, parent) {
     const node = document.createElementNS(NS, tag);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (typeof v === "string" && v.startsWith("var(")) node.style.setProperty(k, v);
+      else node.setAttribute(k, v);
+    }
     if (parent) parent.append(node);
     return node;
   }
@@ -436,32 +476,32 @@ window.RELAY_EMBED = /*EMBED*/false;
     const s = $("stage");
     const defs = svg("defs", {}, s);
     const cone = svg("linearGradient", { id: "cone", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    svg("stop", { offset: "0", "stop-color": "#f2b45a", "stop-opacity": 0.55 }, cone);
+    svg("stop", { offset: "0", "stop-color": "#f2b45a", "stop-opacity": "var(--o-cone)" }, cone);
     svg("stop", { offset: "1", "stop-color": "#f2b45a", "stop-opacity": 0.03 }, cone);
     const sky = svg("linearGradient", { id: "sky", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    svg("stop", { offset: "0", "stop-color": "#0d1830" }, sky);
-    svg("stop", { offset: "1", "stop-color": "#28324a" }, sky);
+    svg("stop", { offset: "0", "stop-color": "var(--o-sky-1)" }, sky);
+    svg("stop", { offset: "1", "stop-color": "var(--o-sky-2)" }, sky);
     const pool = svg("radialGradient", { id: "pool" }, defs);
     svg("stop", { offset: "0", "stop-color": "#f2b45a", "stop-opacity": 0.28 }, pool);
     svg("stop", { offset: "1", "stop-color": "#f2b45a", "stop-opacity": 0 }, pool);
 
-    svg("rect", { x: 0, y: 0, width: 1200, height: 620, fill: "#1c2730" }, s);           // wall
-    svg("rect", { x: 0, y: 0, width: 1200, height: 14, fill: "#141c23" }, s);            // ceiling strip
-    svg("rect", { x: 0, y: 418, width: 1200, height: 202, fill: "#161f27" }, s);         // floor
-    for (let i = 0; i < 9; i++) svg("line", { x1: 0, y1: 430 + i * 22, x2: 1200, y2: 430 + i * 22, stroke: "#1b252e", "stroke-width": 2 }, s);
-    svg("rect", { x: 0, y: 410, width: 1200, height: 10, fill: "#121a20" }, s);          // skirting
+    svg("rect", { x: 0, y: 0, width: 1200, height: 620, fill: "var(--o-wall)" }, s);           // wall
+    svg("rect", { x: 0, y: 0, width: 1200, height: 14, fill: "var(--o-ceiling)" }, s);            // ceiling strip
+    svg("rect", { x: 0, y: 418, width: 1200, height: 202, fill: "var(--o-floor)" }, s);         // floor
+    for (let i = 0; i < 9; i++) svg("line", { x1: 0, y1: 430 + i * 22, x2: 1200, y2: 430 + i * 22, stroke: "var(--o-floor-line)", "stroke-width": 2 }, s);
+    svg("rect", { x: 0, y: 410, width: 1200, height: 10, fill: "var(--o-skirt)" }, s);          // skirting
 
-    for (const role of ROLES) svg("line", { x1: STATION_X[role], y1: 14, x2: STATION_X[role], y2: 236, stroke: "#0f151a", "stroke-width": 2 }, s);
+    for (const role of ROLES) svg("line", { x1: STATION_X[role], y1: 14, x2: STATION_X[role], y2: 236, stroke: "var(--o-cord)", "stroke-width": 2 }, s);
 
     // window with the city at night
     svg("rect", { x: 34, y: 40, width: 286, height: 196, rx: 4, fill: "url(#sky)" }, s);
     for (let i = 0; i < 16; i++) {
       const w = 14 + rnd() * 22, h = 50 + rnd() * 110, bx = 34 + i * 18 - 6;
-      svg("rect", { x: bx, y: 236 - h, width: w, height: h, fill: "#111a28" }, s);
-      for (let k = 0; k < 6; k++) if (rnd() > 0.55) svg("rect", { x: bx + 3 + (k % 2) * 7, y: 236 - h + 8 + Math.floor(k / 2) * 14, width: 3, height: 4, fill: "#e8c76f", opacity: 0.8 }, s);
+      svg("rect", { x: bx, y: 236 - h, width: w, height: h, fill: "var(--o-bldg)" }, s);
+      for (let k = 0; k < 6; k++) if (rnd() > 0.55) svg("rect", { x: bx + 3 + (k % 2) * 7, y: 236 - h + 8 + Math.floor(k / 2) * 14, width: 3, height: 4, fill: "var(--o-bldg-win)", opacity: 0.8, class: "bldg-win", style: `animation-delay: ${(-rnd() * 6).toFixed(2)}s` }, s);
     }
-    svg("rect", { x: 34, y: 40, width: 286, height: 196, rx: 4, fill: "none", stroke: "#2b3944", "stroke-width": 10 }, s);
-    svg("line", { x1: 177, y1: 40, x2: 177, y2: 236, stroke: "#2b3944", "stroke-width": 6 }, s);
+    svg("rect", { x: 34, y: 40, width: 286, height: 196, rx: 4, fill: "none", stroke: "var(--o-frame)", "stroke-width": 10 }, s);
+    svg("line", { x1: 177, y1: 40, x2: 177, y2: 236, stroke: "var(--o-frame)", "stroke-width": 6 }, s);
 
     // task board
     // the checklist display: a wall screen, one cell per requirement
@@ -478,7 +518,7 @@ window.RELAY_EMBED = /*EMBED*/false;
     // test light and clock
     svg("rect", { x: 832, y: 70, width: 56, height: 92, rx: 8, fill: "#26343f" }, s);
     scene.testLight = svg("circle", { cx: 860, cy: 104, r: 16, fill: "#3a464f" }, s);
-    svg("text", { x: 860, y: 148, fill: "#a7b0b6", "font-size": 12, "text-anchor": "middle" }, s).textContent = "Tests";
+    svg("text", { x: 860, y: 148, fill: "var(--o-label)", "font-size": 12, "text-anchor": "middle" }, s).textContent = "Tests";
     // run timer and round counter
     svg("rect", { x: 930, y: 62, width: 168, height: 104, rx: 8, fill: "#2c353e" }, s);
     svg("rect", { x: 938, y: 70, width: 152, height: 88, rx: 4, fill: "#081117" }, s);
@@ -493,11 +533,11 @@ window.RELAY_EMBED = /*EMBED*/false;
       // pendant lamp: cord, shade, light cone
       st.cone = svg("path", { class: "cone", d: `M${cx - 30} 262 L${cx + 30} 262 L${cx + 150} 560 L${cx - 150} 560 Z`, fill: "url(#cone)", opacity: 0 }, s);
       st.pool = svg("ellipse", { class: "cone", cx: cx, cy: 560, rx: 160, ry: 26, fill: "url(#pool)", opacity: 0 }, s);
-      svg("path", { d: `M${cx - 34} 262 L${cx - 18} 236 L${cx + 18} 236 L${cx + 34} 262 Z`, fill: "#2f3d47" }, s);
-      st.bulb = svg("ellipse", { class: "lamp-bulb", cx: cx, cy: 262, rx: 22, ry: 5, fill: "#3a464f" }, s);
+      svg("path", { d: `M${cx - 34} 262 L${cx - 18} 236 L${cx + 18} 236 L${cx + 34} 262 Z`, fill: "var(--o-shade)" }, s);
+      st.bulb = svg("ellipse", { class: "lamp-bulb", cx: cx, cy: 262, rx: 22, ry: 5, fill: "var(--o-bulb-off)" }, s);
       // floor shadow, chair, robot
-      svg("ellipse", { cx: cx, cy: 566, rx: 150, ry: 14, fill: "#10171d" }, s);
-      svg("rect", { x: cx - 128, y: 396, width: 86, height: 100, rx: 10, fill: "#1e2830", stroke: "#2f3b45", "stroke-width": 2 }, s);
+      svg("ellipse", { cx: cx, cy: 566, rx: 150, ry: 14, fill: "var(--o-shadow)" }, s);
+      svg("rect", { x: cx - 128, y: 396, width: 86, height: 100, rx: 10, fill: "var(--o-chair)", stroke: "var(--o-chair-edge)", "stroke-width": 2 }, s);
       st.robot = drawRobot(s, role, cx - 86, 386);
       // desk
       // workstation: gunmetal console with a lit name display
@@ -508,7 +548,7 @@ window.RELAY_EMBED = /*EMBED*/false;
       svg("rect", { x: cx - 62, y: 499, width: 124, height: 32, rx: 4, fill: "#081117", stroke: "#3b4752", "stroke-width": 1.5 }, s);
       st.name = svg("text", { x: cx, y: 521, fill: COLORS[role], "font-size": 16, "font-weight": 700, "text-anchor": "middle", class: "mono" }, s);
       st.name.textContent = titles[role];
-      st.status = svg("text", { x: cx, y: 586, fill: "#a7b0b6", "font-size": 13, "text-anchor": "middle" }, s);
+      st.status = svg("text", { x: cx, y: 586, fill: "var(--o-label)", "font-size": 13, "text-anchor": "middle" }, s);
       // keyboard
       svg("rect", { x: cx - 126, y: 463, width: 80, height: 7, rx: 2, fill: "#24303a" }, s);
       // monitor
@@ -740,7 +780,7 @@ window.RELAY_EMBED = /*EMBED*/false;
       setRobot(st.robot, r.state, role);
       const on = r.state === "active";
       st.cone.setAttribute("opacity", on ? 1 : 0); st.pool.setAttribute("opacity", on ? 1 : 0);
-      st.bulb.setAttribute("fill", on ? "#ffd58a" : "#3a464f");
+      st.bulb.style.fill = on ? "#ffd58a" : "var(--o-bulb-off)";
       st.status.textContent = on ? "working" : r.state === "done" ? "done" : "waiting";
       st.doneSticker.setAttribute("opacity", r.state === "done" && m.finished && m.finished.status === "completed" ? 1 : 0);
       st.bubble.setAttribute("opacity", on && r.bubble ? 1 : 0);
@@ -771,7 +811,7 @@ window.RELAY_EMBED = /*EMBED*/false;
     scene.folder.setAttribute("transform", `translate(${fx} 0)`);
     scene.folderBack.setAttribute("fill", m.folderReturned ? "#e2a094" : "#d9b46a");
     // test light
-    scene.testLight.setAttribute("fill", m.gate === null ? "#3a464f" : m.gate ? "#6cc28f" : "#e2766b");
+    scene.testLight.style.fill = m.gate === null ? "var(--o-bulb-off)" : m.gate ? "#6cc28f" : "#e2766b";
     // clock: elapsed real time of the run
     const elapsed = m.startTime != null && m.now != null ? m.now - m.startTime : 0;
     scene.clockLabel.textContent = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(Math.floor(elapsed % 60)).padStart(2, "0")}`;
@@ -1109,6 +1149,7 @@ window.RELAY_EMBED = /*EMBED*/false;
       if (msg.origin !== location.origin || !msg.data) return;
       if (msg.data.type === "load") { current = msg.data.recording; current.events = current.events || []; load(current, { autoplay: !reduceMotion }); }
       if (msg.data.type === "event" && current) appendLive(current, msg.data.event);
+      if (msg.data.type === "theme" && (msg.data.theme === "light" || msg.data.theme === "dark")) document.documentElement.dataset.theme = msg.data.theme;
     });
     new ResizeObserver(() => parent.postMessage({ type: "office-height", height: document.documentElement.scrollHeight }, location.origin)).observe(document.body);
   } else {
@@ -1117,6 +1158,10 @@ window.RELAY_EMBED = /*EMBED*/false;
     setUpLive();
     if (recs.length) { selectJob($("picker").children[0]); load(recs[0], { autoplay: !reduceMotion }); }
   }
+  const follow = () => { let c = null; try { c = localStorage.getItem("relay-theme"); } catch {}
+    document.documentElement.dataset.theme = c === "light" || c === "dark" ? c : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); };
+  addEventListener("storage", (e) => { if (e.key === "relay-theme") follow(); });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", follow);
   updatePlayButton();
   addEventListener("resize", () => render());
   requestAnimationFrame(frame);

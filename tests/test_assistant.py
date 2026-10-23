@@ -339,7 +339,8 @@ def test_public_mode_needs_sign_in(store, monkeypatch):
     assert client.get("/api/me").json()["signed_in"] is False
     assert client.get("/api/jobs").status_code == 401
     assert client.get("/auth/login", follow_redirects=False).status_code == 503
-    assert client.post("/api/runs", json={"prompt": "x", "kind": "create"}).status_code == 404
+    assert client.post("/api/runs", json={"prompt": "x", "kind": "create"}).status_code == 401
+    assert client.get("/office", follow_redirects=False).status_code == 303
 
 
 def test_google_sign_in_and_gmail_connection(store, monkeypatch):
