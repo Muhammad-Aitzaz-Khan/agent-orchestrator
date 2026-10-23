@@ -7,6 +7,8 @@ Builder, Checker, Reviewer) does the work in the background, and you get a notif
 it's ready. The **Agents** page (or **Show agents working** on any result) opens the office,
 where you can watch each robot's screen, live.
 
+<p align="center"><img src="docs/images/agent-flow.gif" width="432" alt="Animation from Relay's front page: you type 'Every weekday at 7 AM, send me tech news'; the Concierge, the orchestrator, replies with the routine it understood and hands the job down to the Planner, Builder, Checker, and Reviewer; each one uses a tool (news, files, checks) and passes the job along; the result goes back up to the Concierge and arrives as a notification."></p>
+
 ![Relay's Today page: the ask box, and the crew of five robots showing that the Planner and Builder have handed over and the Checker is working on "Morning tech news"](docs/images/assistant-today.png)
 
 ## What you can hand over

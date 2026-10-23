@@ -580,6 +580,49 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .promises li { margin-bottom: 8px; break-inside: avoid; }
 .promises li::marker { color: var(--lamp-text); }
 .promises strong { color: var(--ink); }
+/* ---------- the front page's moving picture: a request's trip through the crew ---------- */
+.trip { margin: 0; display: grid; gap: 10px; min-width: 0; animation: rise 1s var(--out) 0.3s both; }
+.flow-stage { min-width: 0; }
+.flow-svg { display: block; width: 100%; height: auto; border-radius: var(--radius-l); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 40px 80px -50px var(--shadow-deep); overflow: clip; }
+.flow-svg .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; fill: var(--art-muted); }
+.flow-svg .nm { font-family: var(--display); font-weight: 700; font-size: 13px; fill: var(--art-ink); }
+.flow-svg .sub { font-family: var(--mono); font-size: 10.5px; fill: var(--art-muted); transition: fill 0.3s; }
+.flow-svg .sub.on { fill: var(--lamp-text); }
+.flow-svg .say { font-family: var(--mono); font-size: 11.5px; fill: var(--art-ink); }
+.flow-svg .bubble { fill: var(--raised); stroke: var(--line-2); stroke-width: 1.2; }
+.flow-svg .bubble-g { transition: opacity 0.35s ease, transform 0.45s var(--spring); transform-box: fill-box; }
+.flow-svg .bubble-g.off { opacity: 0; transform: scale(0.92); }
+.flow-svg .edge { stroke: var(--art-wire); stroke-width: 1.6; fill: none; transition: stroke 0.25s; }
+.flow-svg .edge.hot { stroke: var(--lamp); stroke-width: 2.2; stroke-dasharray: 6 5; animation: flow-dash 0.5s linear infinite; }
+@keyframes flow-dash { to { stroke-dashoffset: -11; } }
+.flow-svg .tile { fill: var(--raised); stroke: var(--line-2); stroke-width: 1.2; transition: fill 0.3s, stroke 0.3s; }
+.flow-svg .tool .icon { color: var(--art-muted); transition: color 0.3s; }
+.flow-svg .tool.on .tile { fill: color-mix(in srgb, var(--mustard) 22%, var(--raised)); stroke: var(--mustard); }
+.flow-svg .tool.on .icon { color: var(--mustard); }
+.flow-svg .ring { fill: none; stroke: var(--mustard); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.flow-svg .tool.on .ring { animation: flow-ring 1s ease-out infinite; }
+@keyframes flow-ring { 0% { opacity: 0.8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
+.flow-svg .pad { transition: opacity 0.4s; }
+.flow-svg .lid { transition: fill 0.3s; }
+.flow-svg .user.typing .lid { animation: pulse 0.5s steps(2) infinite; }
+.flow-svg .user.typing .hands { animation: type 0.18s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+.flow-svg .caret { animation: pulse 0.8s steps(1) infinite; }
+.flow-svg .notif { transition: opacity 0.4s ease, transform 0.6s var(--spring); transform-box: fill-box; transform-origin: 50% 0; }
+.flow-svg .notif.off { opacity: 0; transform: translateY(-10px) scale(0.9); }
+.flow-svg .notif .bell { transform-box: fill-box; transform-origin: 50% 10%; }
+.flow-svg .notif:not(.off) .bell { animation: wiggle 0.5s ease 0.3s 2; }
+.flow-svg .dots circle { animation: bob 1s ease-in-out infinite; } .flow-svg .dots circle:nth-child(2) { animation-delay: 0.15s; } .flow-svg .dots circle:nth-child(3) { animation-delay: 0.3s; }
+.flow-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flow-bar .icon-btn { width: 38px; height: 38px; }
+.flow-bar .icon-btn svg { width: 18px; height: 18px; }
+.flow-chip { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 0.85rem; font-weight: 700; transition: color 0.25s, background-color 0.25s, border-color 0.25s; }
+.flow-chip:hover { color: var(--ink); }
+.flow-chip[aria-pressed="true"] { color: var(--ink); background: var(--raised); border-color: var(--lamp); }
+.flow-progress { height: 3px; border-radius: 2px; background: var(--raised); overflow: hidden; }
+.flow-progress span { display: block; height: 100%; width: 0; background: var(--crew); background-size: 200% 100%; transition: width 0.6s var(--out); animation: stripe 6s linear infinite; }
+.trip figcaption { color: var(--muted); font-size: 0.9rem; }
+.trip.paused *, .trip.paused *::before, .trip.paused *::after { animation-play-state: paused !important; }
+
 /* a full-width band lit the opposite way to the rest of the page */
 .tone-band { position: relative; margin: 64px calc(50% - 50vw) 0; padding: 4px calc(50vw - 50%) 64px; color: var(--ink); background-color: var(--bg);
   background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 32px 32px; overflow: hidden; isolation: isolate; }
@@ -866,6 +909,9 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     back: "M15 5 8 12l7 7",
     phone: "M8 3h8v18H8V3Zm3 15h2",
     moon: "M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z",
+    globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z",
+    term: "M3 5h18v14H3V5Zm4 4 3 3-3 3m5 0h5",
+    pause: "M8 5v14M16 5v14",
     lock: "M6 11h12v10H6V11Zm2 0V8a4 4 0 1 1 8 0v3",
   };
   function icon(name, cls = "icon") {
@@ -1553,73 +1599,292 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     ["research", "Research", "A short report on a topic, with sources you can check."],
     ["weekly_plan", "Weekly plan", "Your goals and your calendar, turned into a realistic week."],
   ];
-  // The crew on their platform, passing a job's folder down the line.
-  const HERO_CREW = [["concierge", "Concierge", "takes requests", 66, "reading your request"], ["planner", "Planner", "writes the checklist", 172, "checklist: 6 items"],
-    ["coder", "Builder", "does the work", 280, "writing briefing.md"], ["tester", "Checker", "verifies every item", 388, "6 of 6 items pass"], ["reviewer", "Reviewer", "signs off", 494, "approved, sent to your inbox"]];
-  function heroArt() {
-    const art = document.createElementNS(NS, "svg"); art.setAttribute("viewBox", "0 0 560 330"); art.setAttribute("class", "hero-art"); art.setAttribute("role", "img");
-    art.setAttribute("aria-label", "The five robots, Concierge, Planner, Builder, Checker, and Reviewer, passing a job along");
-    const defs = s("defs", {}, art);
-    const pg = s("linearGradient", { id: "hero-deck", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    s("stop", { offset: 0, "stop-color": "var(--art-deck-1)" }, pg); s("stop", { offset: 1, "stop-color": "var(--art-deck-2)" }, pg);
-    const sg = s("linearGradient", { id: "hero-scan", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-    s("stop", { offset: 0, "stop-color": "var(--cyan)", "stop-opacity": 0 }, sg); s("stop", { offset: 1, "stop-color": "var(--cyan)", "stop-opacity": 0.16 }, sg);
-    for (let x = 0; x <= 560; x += 28) s("line", { x1: x, y1: 0, x2: x, y2: 262, stroke: "var(--art-grid)", "stroke-width": 1 }, art);
-    for (let y = 0; y <= 262; y += 28) s("line", { x1: 0, y1: y, x2: 560, y2: y, stroke: "var(--art-grid)", "stroke-width": 1 }, art);
-    s("rect", { x: 0, y: 0, width: 560, height: 40, fill: "url(#hero-scan)", class: "scan" }, art);
-    s("rect", { x: 0, y: 262, width: 560, height: 68, fill: "url(#hero-deck)" }, art);
-    s("path", { d: "M0 262 H560", stroke: "var(--art-edge)", "stroke-width": 2 }, art);
-    const cells = HERO_CREW.map(([r, name, job, x], i) => {
-      const y = 206, top = i % 2 ? 26 : 62, c = RelayUnit.ROLE[r].c;
-      const callout = s("g", { class: "callout", style: `animation-delay:${400 + i * 120}ms` }, art);
-      s("path", { d: `M${x} ${top + 34} V${y - 82}`, stroke: "var(--art-wire)", "stroke-width": 1, "stroke-dasharray": "3 3" }, callout);
-      s("circle", { cx: x, cy: y - 82, r: 2.5, fill: c }, callout);
-      s("text", { x, y: top, fill: c, "font-size": 11, "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" }, callout).textContent = RelayUnit.ROLE[r].id;
-      s("text", { x, y: top + 15, fill: "var(--art-ink)", "font-size": 13, "font-weight": 700, "text-anchor": "middle", "font-family": "Bricolage Grotesque, sans-serif" }, callout).textContent = name;
-      s("text", { x, y: top + 28, fill: "var(--art-muted)", "font-size": 10, "text-anchor": "middle", "font-family": "Atkinson Hyperlegible, sans-serif" }, callout).textContent = job;
-      const glow = s("ellipse", { cx: x, cy: 272, rx: 44, ry: 8, fill: c, opacity: 0, class: "pad" }, art);
-      const bar = s("rect", { x: x - 28, y: 266, width: 56, height: 5, rx: 2, fill: "var(--pad-bar)", class: "pad" }, art);
-      const body = s("g", { class: "unit-float", style: `animation-delay:${-i * 0.6}s` }, art);
-      const parts = RelayUnit.draw(body, r, x, y, { scale: 0.78, wave: i === 0 });
+  // ---------- the front page's moving picture ----------
+  // You -> the Concierge (orchestrator) -> the four downstream agents -> their tools, and back:
+  // a request is typed, travels down the arrows, each robot does its part, and a notification
+  // comes back up. It loops through a few example requests, like a short film.
+  const FLOW_AGENTS = [["planner", "Planner", "plans"], ["coder", "Builder", "builds"], ["tester", "Checker", "checks"], ["reviewer", "Reviewer", "signs off"]];
+  const FLOW_TOOLS = [["web", "News", "globe"], ["mail", "Gmail", "mail"], ["weather", "Weather", "cloud"], ["file", "Files", "file"], ["checks", "Checks", "term"]];
+  const FLOW_SCENES = [
+    { tag: "Morning news", ask: "Every weekday at 7 AM, send me tech news", reply: "A routine: weekdays at 7:00 AM", tool: "web", read: "18 headlines", list: "6-item list", make: "brief.md", n: 6, done: "Your morning tech news is ready" },
+    { tag: "Email summary", ask: "Summarise today's email at 6 PM", reply: "A routine: every day at 6:00 PM", tool: "mail", read: "24 emails", list: "5-item list", make: "digest.md", n: 5, done: "Email summary: 3 need a reply" },
+    { tag: "Flashcards", ask: "Turn notes.pdf into 20 flashcards", reply: "One job, starting now", tool: "file", read: "notes.pdf", list: "20 cards", make: "cards.md", n: 20, done: "Your 20 flashcards are ready" },
+    { tag: "Rain alert", ask: "Tell me tonight if it will rain tomorrow", reply: "A routine: every day at 8:00 PM", tool: "weather", read: "forecast", list: "3-item list", make: "alert.md", n: 3, done: "Rain at 4 PM tomorrow. Take an umbrella" },
+  ];
+  const FLOW_STEPS = 12;
+  function wrapWords(text, max) {
+    const lines = [""];
+    for (const w of text.split(" ")) {
+      const cur = lines[lines.length - 1];
+      if (cur && (cur + " " + w).length > max) lines.push(w); else lines[lines.length - 1] = cur ? `${cur} ${w}` : w;
+    }
+    return lines;
+  }
+  function svgLines(textEl, lines, x, y0, lh = 16) {
+    textEl.replaceChildren();
+    lines.forEach((l, i) => { s("tspan", { x, y: y0 + i * lh }, textEl).textContent = l; });
+  }
+  function buildFlow(W) {
+    const H = 606, cx = W / 2, CH = 6.95;  // CH: width of one character of the mono font at 11.5
+    const svgEl = document.createElementNS(NS, "svg");
+    svgEl.setAttribute("viewBox", `0 0 ${W} ${H}`); svgEl.setAttribute("class", "flow-svg"); svgEl.setAttribute("role", "img");
+    svgEl.setAttribute("aria-label", "An animation: you type a request; the Concierge, the orchestrator, passes it to the Planner, Builder, Checker, and Reviewer; they use tools such as news, Gmail, weather, your files, and checks; and the result comes back to you as a notification.");
+    const arrow = `flow-arrow-${++maskSeq}`;
+    const marker = s("marker", { id: arrow, viewBox: "0 0 10 10", refX: 8.5, refY: 5, markerWidth: 6.5, markerHeight: 6.5, orient: "auto-start-reverse" }, s("defs", {}, svgEl));
+    s("path", { d: "M0 0 L10 5 L0 10 z", fill: "var(--art-muted)" }, marker);
+    for (let x = 0; x <= W; x += 28) s("line", { x1: x, y1: 0, x2: x, y2: H, stroke: "var(--art-grid)", "stroke-width": 1 }, svgEl);
+    for (let y = 0; y <= H; y += 28) s("line", { x1: 0, y1: y, x2: W, y2: y, stroke: "var(--art-grid)", "stroke-width": 1 }, svgEl);
+    const edge = (x1, y1, x2, y2, two = true) => s("line", { x1, y1, x2, y2, class: "edge", "marker-end": `url(#${arrow})`, ...(two ? { "marker-start": `url(#${arrow})` } : {}) }, svgEl);
+    // a band with its name sitting on the border, like a form's fieldset
+    const band = (y, hgt, color, label, onBottom) => {
+      const r = s("rect", { x: 8, y, width: W - 16, height: hgt, rx: 26, "stroke-width": 1.8 }, svgEl);
+      r.style.fill = `color-mix(in srgb, ${color} 7%, transparent)`; r.style.stroke = color;
+      const ly = onBottom ? y + hgt : y;
+      s("rect", { x: 28, y: ly - 7, width: label.length * 6.6 + 12, height: 14, rx: 7, fill: "var(--panel)" }, svgEl);
+      const t = s("text", { x: 34, y: ly + 3.5, class: "lbl" }, svgEl); t.textContent = label; t.style.fill = color;
+    };
+    const text = (x, y, cls, str, anchor = "middle") => { const t = s("text", { x, y, class: cls, "text-anchor": anchor }, svgEl); t.textContent = str; return t; };
+
+    // the two bands, drawn first so everything else sits on them
+    band(326, 160, "var(--cobalt)", W < 500 ? "AGENTS" : "DOWNSTREAM AGENTS", false);
+    band(514, 80, "var(--mustard)", "TOOLS", true);
+
+    // you, at your laptop
+    const user = s("g", { class: "user" }, svgEl);
+    s("circle", { cx, cy: 30, r: 15, fill: "var(--cobalt)" }, user);
+    s("path", { d: `M${cx - 26} 84 Q${cx - 26} 52 ${cx} 52 Q${cx + 26} 52 ${cx + 26} 84 Z`, fill: "var(--cobalt)" }, user);
+    s("rect", { x: cx - 31, y: 60, width: 62, height: 32, rx: 3, fill: "var(--panel)", stroke: "var(--cobalt)", "stroke-width": 2 }, user);
+    s("circle", { cx, cy: 76, r: 4, class: "lid", fill: "var(--cobalt)" }, user);
+    const hands = s("g", { class: "hands" }, user);
+    s("rect", { x: cx - 40, y: 90, width: 80, height: 6, rx: 3, fill: "var(--cobalt)" }, hands);
+    text(cx, 116, "nm", "You");
+
+    // your message, top right
+    const ux0 = cx + 46, uw = W - 10 - ux0, uChars = Math.floor((uw - 24) / CH);
+    const userSay = s("g", { class: "bubble-g off" }, svgEl);
+    const userRect = s("rect", { x: ux0, y: 12, width: uw, height: 40, rx: 12, class: "bubble" }, userSay);
+    s("path", { d: `M${ux0} 40 l-9 6 l9 -1 z`, class: "bubble" }, userSay);
+    const userText = s("text", { class: "say" }, userSay);
+    const caret = s("rect", { width: 7, height: 13, rx: 1, class: "caret", fill: "var(--lamp)" }, userSay);
+
+    // the notification that comes back, top left
+    const nx0 = 10, nw = cx - 46 - nx0, nChars = Math.floor((nw - 46) / CH);
+    const notif = s("g", { class: "notif off" }, svgEl);
+    const notifRect = s("rect", { x: nx0, y: 12, width: nw, height: 52, rx: 12, class: "bubble", "stroke-width": 1.6 }, notif);
+    notifRect.style.stroke = "var(--sage)";
+    const bell = icon("bell", "icon bell"); bell.setAttribute("x", nx0 + 12); bell.setAttribute("y", 22); bell.setAttribute("width", 20); bell.setAttribute("height", 20); bell.style.color = "var(--sage)";
+    notif.append(bell);
+    const notifHead = s("text", { x: nx0 + 40, y: 30, class: "lbl" }, notif); notifHead.textContent = "RELAY · NOW"; notifHead.style.fill = "var(--sage)";
+    const notifText = s("text", { class: "say" }, notif);
+
+    // the orchestrator
+    edge(cx, 124, cx, 168);
+    const orchG = s("g", {}, svgEl);
+    const orchPad = s("ellipse", { cx, cy: 272, rx: 46, ry: 7, class: "pad", opacity: 0 }, orchG); orchPad.style.fill = RelayUnit.ROLE.concierge.c;
+    const orch = RelayUnit.draw(orchG, "concierge", cx, 226, { scale: 0.6 });
+    RelayUnit.state(orch, "idle");
+    const orchName = s("text", { x: cx, y: 294, "text-anchor": "middle" }, svgEl);
+    s("tspan", { class: "nm" }, orchName).textContent = "Concierge";
+    s("tspan", { class: "sub", dx: 6 }, orchName).textContent = "the orchestrator";
+    const ox0 = 10, ow = cx - 58 - ox0, oChars = Math.floor((ow - 24) / CH);
+    const orchSay = s("g", { class: "bubble-g off" }, svgEl);
+    const orchRect = s("rect", { x: ox0, y: 178, width: ow, height: 40, rx: 12, class: "bubble" }, orchSay);
+    orchRect.style.stroke = RelayUnit.ROLE.concierge.c;
+    s("path", { d: `M${ox0 + ow} 200 l9 4 l-9 4 z`, class: "bubble" }, orchSay).style.stroke = RelayUnit.ROLE.concierge.c;
+    const orchText = s("text", { class: "say" }, orchSay);
+    const dots = s("g", { class: "dots" }, orchSay);
+    for (let i = 0; i < 3; i++) s("circle", { cx: ox0 + 20 + i * 12, cy: 198, r: 3.5, fill: RelayUnit.ROLE.concierge.c }, dots);
+
+    // the downstream agents
+    const ax = (i) => W * 0.14 + (i * (W * 0.72)) / 3;
+    const agents = {};
+    FLOW_AGENTS.forEach(([role, name, desc], i) => {
+      const x = ax(i), c = RelayUnit.ROLE[role].c;
+      const fan = edge(cx, 302, x, 346);
+      const toTool = edge(x, 488, x, 512);
+      const g = s("g", {}, svgEl);
+      const pad = s("ellipse", { cx: x, cy: 428, rx: 30, ry: 5, class: "pad", opacity: 0 }, g); pad.style.fill = c;
+      const parts = RelayUnit.draw(g, role, x, 394, { scale: 0.46 });
       RelayUnit.state(parts, "idle");
-      return { x, c, glow, bar, parts };
+      const nm = text(x, 448, "nm", name);
+      const sub = text(x, 463, "sub", desc);
+      agents[role] = { x, c, parts, pad, sub, desc, fan, toTool, nm, top: [x, 350], bottom: [x, 486], left: [x - 30, 394], right: [x + 30, 394] };
     });
-    // the job's folder
-    const packet = s("g", { class: "packet", transform: `translate(${cells[0].x - 13} 236)` }, art);
-    s("path", { d: "M0 4 H9 L12 1 H26 V20 H0 Z", fill: "var(--lamp)" }, packet);
-    s("rect", { x: 0, y: 6, width: 26, height: 14, rx: 1.5, fill: "color-mix(in srgb, var(--lamp) 80%, #fff)" }, packet);
-    const ticker = s("text", { x: 280, y: 306, fill: "var(--art-muted)", "text-anchor": "middle", class: "ticker" }, art);
-    let step = 0;
-    function show(n) {
-      cells.forEach((cell, i) => {
-        const st = i < n ? "done" : i === n ? "active" : "idle";
-        RelayUnit.state(cell.parts, st);
-        cell.glow.setAttribute("opacity", st === "active" ? 0.3 : 0);
-        cell.bar.style.fill = st === "active" ? cell.c : st === "done" ? "var(--pad-done)" : "var(--pad-bar)";
-      });
-      const cell = cells[Math.min(n, cells.length - 1)];
-      packet.setAttribute("transform", `translate(${cell.x - 13} ${n >= cells.length ? 300 : 236})`);
-      packet.style.opacity = n >= cells.length ? 0 : 1;
-      const [r, , , , doing] = HERO_CREW[Math.min(n, cells.length - 1)];
-      ticker.textContent = n >= cells.length ? "job done · next one coming up" : `${RelayUnit.ROLE[r].id} · ${doing}`;
-    }
-    show(0);
-    if (!reduced()) {
-      const timer = setInterval(() => {
-        if (!art.isConnected) { clearInterval(timer); return; }
-        step = (step + 1) % (cells.length + 1);
-        show(step);
-      }, 1700);
-    }
-    const stage = h("div", { class: "hero-stage" }, art);
-    stage.addEventListener("pointermove", (e) => {
-      if (reduced()) return;
-      const r = stage.getBoundingClientRect();
-      art.style.setProperty("--ry", `${((e.clientX - r.left) / r.width - 0.5) * 10}deg`);
-      art.style.setProperty("--rx", `${-((e.clientY - r.top) / r.height - 0.5) * 8}deg`);
+    const hand = [0, 1, 2].map((i) => edge(ax(i) + 30, 394, ax(i + 1) - 30, 394, false));
+
+    // the tools
+    const tx = (i) => W * 0.1 + (i * (W * 0.8)) / 4;
+    const tools = {};
+    FLOW_TOOLS.forEach(([key, name, ic], i) => {
+      const x = tx(i);
+      const g = s("g", { class: "tool" }, svgEl);
+      s("rect", { x: x - 17, y: 524, width: 34, height: 34, rx: 9, class: "ring" }, g);
+      s("rect", { x: x - 17, y: 524, width: 34, height: 34, rx: 9, class: "tile" }, g);
+      const ico = icon(ic); ico.setAttribute("x", x - 10); ico.setAttribute("y", 531); ico.setAttribute("width", 20); ico.setAttribute("height", 20);
+      g.append(ico);
+      text(x, 574, "sub", name);
+      tools[key] = { g, top: [x, 524] };
     });
-    stage.addEventListener("pointerleave", () => { art.style.setProperty("--rx", "0deg"); art.style.setProperty("--ry", "0deg"); });
-    return stage;
+    return { svg: svgEl, W, user, userSay, userRect, userText, caret, uChars, ux0, notif, notifRect, notifText, nChars, nx0,
+      orch, orchPad, orchSay, orchRect, orchText, dots, oChars, ox0, agents, hand, tools,
+      edges: { user: svgEl.querySelector(".edge") },
+      p: { user: [cx, 100], orchTop: [cx, 172], orchBottom: [cx, 300] } };
+  }
+
+  function agentFlow() {
+    const holder = h("div", { class: "flow-stage" });
+    const bar = h("span");
+    const pauseBtn = h("button", { type: "button", class: "icon-btn", "aria-label": "Pause the animation", onclick: () => setPaused(!paused) }, icon("pause"));
+    const chips = FLOW_SCENES.map((sc, i) => h("button", { type: "button", class: "flow-chip", "aria-pressed": "false", onclick: () => { scene = i; if (paused) setPaused(false); restart(); } }, sc.tag));
+    const fig = h("figure", { class: "trip" }, holder, h("div", { class: "flow-progress", "aria-hidden": "true" }, bar),
+      h("div", { class: "flow-bar" }, pauseBtn, h("div", { class: "flow-bar", role: "group", "aria-label": "Example requests" }, ...chips)),
+      h("figcaption", { text: "You ask once. The Concierge, the orchestrator, hands the job to four downstream agents. They use the tools, check each other's work, and the result comes back to you as a notification." }));
+    let token = 0, paused = false, scene = 0, v = null;
+    const anims = new Set();
+    const STOP = Symbol("stop");
+    const alive = (t) => { if (t !== token || !fig.isConnected) throw STOP; };
+    const sleep = (ms, t) => new Promise((resolve, reject) => {
+      let left = ms;
+      const tick = () => {
+        if (t !== token || !fig.isConnected) return reject(STOP);
+        if (paused || document.hidden) return setTimeout(tick, 150);
+        if (left <= 0) return resolve();
+        const d = Math.min(left, 100); left -= d; setTimeout(tick, d);
+      };
+      tick();
+    });
+    const step = (k) => { bar.style.width = `${(k / FLOW_STEPS) * 100}%`; };
+    function setPaused(p) {
+      paused = p; fig.classList.toggle("paused", p);
+      for (const a of anims) p ? a.pause() : a.play();
+      pauseBtn.replaceChildren(icon(p ? "play" : "pause"));
+      pauseBtn.setAttribute("aria-label", p ? "Play the animation" : "Pause the animation");
+    }
+    async function fly(t, [x1, y1], [x2, y2], color, line, ms = 650) {
+      alive(t);
+      if (line) line.classList.add("hot");
+      const g = s("g", { class: "packet" }, v.svg);
+      for (const [r, op, fill] of [[12, 0.22, color], [6.5, 1, color], [2.6, 1, "#ffffff"]]) { const c = s("circle", { r, opacity: op }, g); c.style.fill = fill; }
+      const a = g.animate([{ transform: `translate(${x1}px, ${y1}px)` }, { transform: `translate(${x2}px, ${y2}px)` }], { duration: ms, easing: "cubic-bezier(.5,.05,.3,1)", fill: "forwards" });
+      anims.add(a); if (paused) a.pause();
+      try { await a.finished; } catch { /* cancelled by a restart */ }
+      anims.delete(a); g.remove(); if (line) line.classList.remove("hot");
+      alive(t);
+    }
+    function agent(role, st, say) {
+      const ag = v.agents[role];
+      RelayUnit.state(ag.parts, st);
+      ag.pad.setAttribute("opacity", st === "active" ? 0.35 : 0);
+      ag.sub.textContent = say ?? ag.desc;
+      ag.sub.classList.toggle("on", st === "active");
+    }
+    function orchestrator(st) { RelayUnit.state(v.orch, st); v.orchPad.setAttribute("opacity", st === "active" ? 0.35 : 0); }
+    function orchSays(textOrNull) {
+      v.orchSay.classList.remove("off");
+      const lines = textOrNull ? wrapWords(textOrNull, v.oChars) : [];
+      v.dots.style.display = textOrNull ? "none" : "";
+      v.orchRect.setAttribute("height", Math.max(40, 22 + lines.length * 16));
+      svgLines(v.orchText, lines, v.ox0 + 12, 202 - (lines.length - 1) * 8);
+    }
+    function userTyped(full, n) {
+      const lines = wrapWords(full, v.uChars);
+      v.userRect.setAttribute("height", 22 + lines.length * 16);
+      let left = n; const shown = lines.map((l) => { const part = l.slice(0, Math.max(0, left)); left -= l.length + 1; return part; });
+      svgLines(v.userText, shown, v.ux0 + 12, 33);
+      const row = Math.max(0, shown.findLastIndex((l) => l.length > 0));
+      const typedRow = n >= full.length ? lines.length - 1 : row;
+      v.caret.setAttribute("x", v.ux0 + 13 + shown[typedRow].length * 6.95); v.caret.setAttribute("y", 23 + typedRow * 16);
+    }
+    function notify(textOrNull) {
+      v.notif.classList.toggle("off", !textOrNull);
+      if (!textOrNull) return;
+      const lines = wrapWords(textOrNull, v.nChars);
+      v.notifRect.setAttribute("height", 34 + lines.length * 15);
+      svgLines(v.notifText, lines, v.nx0 + 40, 46, 15);
+    }
+    function reset(i) {
+      chips.forEach((c, n) => c.setAttribute("aria-pressed", String(n === i)));
+      step(0);
+      v.userSay.classList.add("off"); v.orchSay.classList.add("off"); notify(null);
+      v.user.classList.remove("typing"); v.caret.style.display = "";
+      orchestrator("idle");
+      for (const [role] of FLOW_AGENTS) agent(role, "idle");
+      for (const tl of Object.values(v.tools)) tl.g.classList.remove("on");
+      for (const e of v.svg.querySelectorAll(".edge.hot")) e.classList.remove("hot");
+    }
+    async function toolTrip(t, role, key, after) {
+      const ag = v.agents[role], tl = v.tools[key];
+      await fly(t, ag.bottom, tl.top, ag.c, ag.toTool, 520);
+      tl.g.classList.add("on");
+      await sleep(650, t);
+      await fly(t, tl.top, ag.bottom, "var(--mustard)", ag.toTool, 520);
+      tl.g.classList.remove("on");
+      if (after) agent(role, "active", after);
+    }
+    async function play(t, sc) {
+      reset(scene);
+      // 1. you type
+      v.userSay.classList.remove("off"); v.user.classList.add("typing");
+      for (let n = 0; n <= sc.ask.length; n++) { userTyped(sc.ask, n); await sleep(32 + Math.random() * 38, t); }
+      v.user.classList.remove("typing"); v.caret.style.display = "none";
+      await sleep(400, t); step(1);
+      // 2. the orchestrator reads it and says what it understood
+      await fly(t, v.p.user, v.p.orchTop, "var(--cobalt)", v.edges.user);
+      orchestrator("active"); orchSays(null); await sleep(900, t);
+      orchSays(sc.reply); step(2); await sleep(1300, t);
+      // 3. the Planner reads the sources and writes a checklist
+      await fly(t, v.p.orchBottom, v.agents.planner.top, RelayUnit.ROLE.concierge.c, v.agents.planner.fan);
+      agent("planner", "active", "reading"); step(3);
+      await toolTrip(t, "planner", sc.tool, sc.read);
+      await sleep(500, t); agent("planner", "active", sc.list); await sleep(700, t); agent("planner", "done", sc.list); step(4);
+      // 4. the Builder does the work
+      await fly(t, v.agents.planner.right, v.agents.coder.left, v.agents.planner.c, v.hand[0], 500);
+      agent("coder", "active", "writing"); step(5);
+      await toolTrip(t, "coder", sc.tool, `writing ${sc.make}`);
+      await sleep(900, t); agent("coder", "done", sc.make); step(6);
+      // 5. the Checker checks every item
+      await fly(t, v.agents.coder.right, v.agents.tester.left, v.agents.coder.c, v.hand[1], 500);
+      agent("tester", "active", "checking"); step(7);
+      await toolTrip(t, "tester", "checks", `${sc.n}/${sc.n} pass`);
+      await sleep(600, t); agent("tester", "done", `${sc.n}/${sc.n} pass`); step(8);
+      // 6. the Reviewer signs off
+      await fly(t, v.agents.tester.right, v.agents.reviewer.left, v.agents.tester.c, v.hand[2], 500);
+      agent("reviewer", "active", "reviewing"); await sleep(1100, t);
+      agent("reviewer", "done", "approved"); step(9);
+      // 7. back up to the orchestrator, and to you
+      await fly(t, v.agents.reviewer.top, v.p.orchBottom, v.agents.reviewer.c, v.agents.reviewer.fan);
+      orchestrator("done"); orchSays("Done. Sending it to you now."); step(10); await sleep(700, t);
+      await fly(t, v.p.orchTop, v.p.user, "var(--sage)", v.edges.user);
+      notify(sc.done); step(11); await sleep(3000, t); step(12); await sleep(500, t);
+    }
+    function still(sc) {  // reduced motion: the finished picture, no movement
+      reset(scene); step(FLOW_STEPS);
+      v.userSay.classList.remove("off"); userTyped(sc.ask, sc.ask.length); v.caret.style.display = "none";
+      orchestrator("done"); orchSays(sc.reply);
+      agent("planner", "done", sc.list); agent("coder", "done", sc.make); agent("tester", "done", `${sc.n}/${sc.n} pass`); agent("reviewer", "done", "approved");
+      v.tools[sc.tool].g.classList.add("on");
+      notify(sc.done);
+    }
+    async function run(t) {
+      if (reduced()) { still(FLOW_SCENES[scene]); return; }
+      try { for (;;) { await play(t, FLOW_SCENES[scene]); scene = (scene + 1) % FLOW_SCENES.length; } }
+      catch (e) { if (e !== STOP) throw e; }
+    }
+    function restart() {
+      token++;
+      for (const a of anims) a.cancel();
+      anims.clear();
+      if (v) run(token);
+    }
+    pauseBtn.hidden = reduced();
+    // Built when it first gets a size; a phone gets a narrower layout with the same text size.
+    new ResizeObserver(() => {
+      const width = holder.clientWidth; if (!width) return;
+      const W = width < 480 ? 380 : 560;
+      if (v && v.W === W) return;
+      v = buildFlow(W); holder.replaceChildren(v.svg); restart();
+    }).observe(holder);
+    return fig;
   }
   // Example requests, typed out one after another.
   const TYPED = ["news about AI and cricket, every morning at 7", "summarise today's email at 6 PM", "turn my lecture notes into flashcards",
@@ -1674,7 +1939,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
           h("div", { class: "cta" },
             state.me.google ? h("a", { class: state.me.invites ? "btn" : "btn primary", href: "/auth/login", text: "Sign in with Google" })
               : state.me.invites ? h("span", { class: "muted small" }, "Invite-only. Ask the person who runs this Relay for a code.") : h("span", { class: "muted", text: "Sign-in is not set up on this server yet." }))),
-        heroArt()),
+        agentFlow()),
       h("section", { class: "band reveal" },
         h("div", { class: "stats stagger" },
           h("div", { class: "stat spot", style: "--c: var(--violet)" }, h("b", { "data-count": 5, text: "0" }), h("span", { text: "robots on every job" })),
