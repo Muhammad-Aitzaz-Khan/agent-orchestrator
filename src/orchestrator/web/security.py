@@ -1,7 +1,7 @@
 """The web app's protective layer: who is really asking, what the browser may do with our pages,
 and how much anyone can send or try.
 
-Each piece answers a common attack (see docs/SECURITY.md for the full list and the sources):
+Each piece answers a common attack (see docs/security-review.md for the full list and the sources):
 
     client_ip         the visitor's real address for rate limits; a forged X-Forwarded-For
                       header can't make one person look like many

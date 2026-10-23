@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://relay-u0de.onrender.com"><img alt="Try it live" src="https://img.shields.io/badge/try_it-live-F5B544?style=for-the-badge&logo=render&logoColor=white"></a>
   <a href="https://github.com/Muhammad-Aitzaz-Khan/agent-orchestrator/actions/workflows/tests.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/Muhammad-Aitzaz-Khan/agent-orchestrator/tests.yml?branch=main&style=for-the-badge&label=tests&logo=githubactions&logoColor=white"></a>
-  <a href="docs/SECURITY.md"><img alt="Checked against the OWASP Top 10" src="https://img.shields.io/badge/OWASP-Top_10_checked-6E56CF?style=for-the-badge&logo=owasp&logoColor=white"></a>
+  <a href="docs/security-review.md"><img alt="Checked against the OWASP Top 10" src="https://img.shields.io/badge/OWASP-Top_10_checked-6E56CF?style=for-the-badge&logo=owasp&logoColor=white"></a>
 </p>
 
 <p align="center">
@@ -220,7 +220,7 @@ test in [`tests/test_security.py`](tests/test_security.py).
 Relay runs AI agents for real people on a public website, so I went through the two checklists
 most security teams start from, the **OWASP Top 10 (2025)** for web apps and the **OWASP Top
 10 for LLM Applications (2025)**, and wrote down what Relay does about each risk and which test
-proves it. The full table is in [docs/SECURITY.md](docs/SECURITY.md).
+proves it. The full table is in [docs/security-review.md](docs/security-review.md).
 
 <details>
 <summary><b>The short version</b></summary>

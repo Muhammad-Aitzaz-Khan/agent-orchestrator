@@ -68,7 +68,7 @@ codes, so nobody gets signed out. After that, every push rebuilds the site by it
   hours, a small AI allowance of their own, no Gmail or Calendar, and everything they make is
   deleted when the day ends. One free day per browser, a few per network. To switch it off,
   set `TRIALS=off` in the service's settings (Render: your service > Environment). The other
-  limits are in [SECURITY.md](SECURITY.md#the-free-day).
+  limits are in [the security review](security-review.md#the-free-day).
 
 ## 4. Put it on your phone
 
@@ -114,7 +114,7 @@ paid security review, which a personal assistant for you and your friends doesn'
   you and a few friends. Jobs run one at a time and others wait their turn.
 - **Agent code.** Scripts the agents write run in the guarded sandbox
   (`src/orchestrator/guard`): no network, no other programs, none of the site's secrets. It's
-  defence in depth for a small site, not a container. More in [SECURITY.md](SECURITY.md).
+  defence in depth for a small site, not a container. More in [the security review](security-review.md).
 
 ## Other hosts
 

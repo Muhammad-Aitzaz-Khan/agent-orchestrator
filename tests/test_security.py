@@ -1,6 +1,6 @@
 """The free day ("Try it out") and the protections around the public site.
 
-Each test is one promise from docs/SECURITY.md, checked the way an attacker or a curious
+Each test is one promise from docs/security-review.md, checked the way an attacker or a curious
 visitor would poke at it.
 """
 import datetime as dt

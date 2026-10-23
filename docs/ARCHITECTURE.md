@@ -252,7 +252,7 @@ weekday news routine, and a page watcher then worked first time.
 People without an invite can try Relay for 24 hours (`assistant/trial.py`), with their own
 small allowance, no Gmail or Calendar, and their data deleted when the day ends. The
 protective layer of the website (headers, limits, the real client address) is in
-`web/security.py`. Both are explained, risk by risk, in [SECURITY.md](SECURITY.md).
+`web/security.py`. Both are explained, risk by risk, in [the security review](security-review.md).
 
 ## Measuring what each part adds
 
