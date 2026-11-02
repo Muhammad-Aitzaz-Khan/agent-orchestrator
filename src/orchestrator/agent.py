@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import (
     APIConnectionError,
+    APIStatusError,
     APITimeoutError,
     BadRequestError,
     InternalServerError,
@@ -60,6 +61,16 @@ class DailyLimitReached(Exception):
     """The provider's per-day quota is used up. Retrying today will not help."""
 
 
+class RequestTooLarge(Exception):
+    """One request is bigger than the provider accepts. Waiting won't help; sending less will."""
+
+
+# How hard to squeeze the conversation after each "request too large": the share of the usual
+# budget, and how many of the newest messages stay untouched. The last level may shorten even
+# the newest tool output (the model can read the file again, in parts).
+SQUEEZES = [(1.0, None), (0.6, 2), (0.45, 1), (0.3, 0)]
+
+
 # ---------- configuration ----------
 
 def make_client() -> OpenAI:
@@ -90,6 +101,16 @@ def new_run_id() -> str:
 def is_daily_limit(error: Exception) -> bool:
     text = str(error).lower().replace("_", " ")
     return any(marker in text for marker in ("per day", "(tpd)", "(rpd)", "perday"))
+
+
+def is_too_large(error: Exception) -> bool:
+    """Groq answers an oversized request with 413, or with a 429 whose message says the single
+    request is bigger than the per-minute limit. Either way, a smaller request is the only fix."""
+    if getattr(error, "status_code", None) == 413:
+        return True
+    text = str(error).lower()
+    return any(marker in text for marker in ("request too large", "reduce your message size",
+                                             "context_length_exceeded", "maximum context length"))
 
 
 def is_bad_tool_call(error: Exception) -> bool:
@@ -142,6 +163,8 @@ def call_model(
         except RateLimitError as e:
             if is_daily_limit(e):
                 raise DailyLimitReached(str(e)) from e
+            if is_too_large(e):
+                raise RequestTooLarge(_api_error_message(e)) from e
             if rate_limit_waits == MAX_RATE_LIMIT_WAITS:
                 raise
             wait = retry_after_seconds(e, rate_limit_waits)
@@ -149,6 +172,8 @@ def call_model(
             tracer.log("rate_limited", attempt=rate_limit_waits, wait_s=wait)
             sleep(wait)
         except BadRequestError as e:
+            if is_too_large(e):
+                raise RequestTooLarge(_api_error_message(e)) from e
             if not is_bad_tool_call(e) or bad_tool_calls == MAX_BAD_TOOL_CALL_RETRIES:
                 raise
             bad_tool_calls += 1
@@ -170,6 +195,10 @@ def call_model(
             tracer.log("provider_unavailable", attempt=unavailable_waits, wait_s=wait,
                        error=str(e)[:200])
             sleep(wait)
+        except APIStatusError as e:
+            if is_too_large(e):
+                raise RequestTooLarge(_api_error_message(e)) from e
+            raise
 
 
 # ---------- the loop ----------
@@ -238,20 +267,33 @@ def run_agent(
         {"role": "user", "content": task},
     ]
     nudges = 0
+    squeeze = 0  # rises after each "request too large" and stays up: the conversation only grows
     recent_calls: list[tuple] = []  # tool calls of the latest steps, for loop detection
 
     try:
         for number in range(1, max_steps + 1):
-            to_send = compact(messages, context_chars)  # full history stays in `messages`
-            sent_chars = conversation_size(to_send)
-            t0 = time.perf_counter()
             extra = {}
             if role and number == max_steps:
                 # Last step: the only thing it may do is hand in its work.
                 extra["tool_choice"] = {"type": "function", "function": {"name": role.submit_tool}}
-            response = call_model(
-                client, tracer, sleep, model=model, messages=to_send, tools=schemas, **extra
-            )
+            t0 = time.perf_counter()
+            while True:
+                share, keep = SQUEEZES[squeeze]
+                # the full history stays in `messages`; only what is sent gets shortened
+                to_send = compact(messages, int(context_chars * share),
+                                  **({} if keep is None else {"keep_recent": keep}))
+                sent_chars = conversation_size(to_send)
+                try:
+                    response = call_model(
+                        client, tracer, sleep, model=model, messages=to_send, tools=schemas, **extra
+                    )
+                    break
+                except RequestTooLarge as e:
+                    if squeeze == len(SQUEEZES) - 1:
+                        raise
+                    squeeze += 1
+                    tracer.log("request_too_large", step=number, sent_chars=sent_chars,
+                               squeeze=squeeze, error=str(e)[:300])
             latency_ms = int((time.perf_counter() - t0) * 1000)
 
             message = response.choices[0].message
@@ -336,6 +378,9 @@ def run_agent(
     except DailyLimitReached as e:
         result.status = "error"
         result.error = f"DailyLimitReached: {e}"
+    except RequestTooLarge as e:
+        result.status = "error"
+        result.error = f"RequestTooLarge: {e}"
     except OpenAIError as e:
         result.status = "error"
         result.error = f"{type(e).__name__}: {e}"

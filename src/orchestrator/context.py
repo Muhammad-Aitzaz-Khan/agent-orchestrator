@@ -11,13 +11,15 @@ conversation is over budget, the oldest bulky parts are shortened first:
 3. If it is still too big, the oldest whole steps (a model call plus its tool results, which
    the API requires to stay together) are dropped and replaced by a one-line note.
 
-The system prompt, the task, and the most recent steps are always kept in full, so the model
-still knows what it is doing and can re-read any file it needs.
+The system prompt, the task, and the most recent steps are normally kept in full, so the model
+still knows what it is doing and can re-read any file it needs. If the provider still says a
+request is too large, the agent calls this again with a smaller budget and fewer untouched
+messages (see agent.SQUEEZES).
 """
 import json
 
 PREVIEW_CHARS = 300
-KEEP_RECENT_MESSAGES = 4  # the newest messages (about two steps) are never shortened
+KEEP_RECENT_MESSAGES = 4  # the newest messages (about two steps) are normally left alone
 
 
 def conversation_size(messages: list[dict]) -> int:
@@ -66,14 +68,17 @@ def _strip_reasoning(message: dict) -> None:
         message["content"] = content[:PREVIEW_CHARS] + " [...]"
 
 
-def compact(messages: list[dict], max_chars: int) -> list[dict]:
-    """Return a copy of messages that fits in max_chars where possible. Never mutates the input."""
+def compact(messages: list[dict], max_chars: int, keep_recent: int = KEEP_RECENT_MESSAGES) -> list[dict]:
+    """Return a copy of messages that fits in max_chars where possible. Never mutates the input.
+
+    The newest `keep_recent` messages are left alone. The agent lowers this when the provider
+    says a request is too large, so even a big file it has just read can be shortened."""
     result = json.loads(json.dumps(messages, default=str))  # deep copy of plain data
     if conversation_size(result) <= max_chars:
         return result
 
     # messages[0] is the system prompt and messages[1] the task; both stay intact.
-    old = range(2, max(2, len(result) - KEEP_RECENT_MESSAGES))
+    old = range(2, max(2, len(result) - keep_recent))
     passes = [
         {"tool": _shorten_tool_output, "assistant": _shorten_write_calls},
         {"tool": _remove_tool_output, "assistant": _strip_reasoning},
@@ -85,13 +90,13 @@ def compact(messages: list[dict], max_chars: int) -> list[dict]:
                 shorten(result[i])
             if conversation_size(result) <= max_chars:
                 return result
-    return _drop_oldest_steps(result, max_chars)
+    return _drop_oldest_steps(result, max_chars, keep_recent)
 
 
-def _drop_oldest_steps(messages: list[dict], max_chars: int) -> list[dict]:
+def _drop_oldest_steps(messages: list[dict], max_chars: int, keep_recent: int) -> list[dict]:
     head, body = messages[:2], messages[2:]
     dropped = 0
-    while len(body) > KEEP_RECENT_MESSAGES:
+    while len(body) > max(keep_recent, 1):
         candidate = head + [_dropped_note(dropped)] + body
         if dropped and conversation_size(candidate) <= max_chars:
             break
@@ -99,7 +104,7 @@ def _drop_oldest_steps(messages: list[dict], max_chars: int) -> list[dict]:
         end = 1
         while end < len(body) and body[end].get("role") == "tool":
             end += 1
-        if len(body) - end < KEEP_RECENT_MESSAGES:
+        if len(body) - end < max(keep_recent, 1):
             break
         body = body[end:]
         dropped += 1

@@ -78,3 +78,18 @@ def test_drops_oldest_whole_steps_when_still_too_big():
         if m["role"] == "tool":
             assert result[i - 1]["role"] in ("assistant", "tool")
     assert result[-1] == messages[-1]
+
+
+def test_a_smaller_keep_recent_lets_the_newest_output_be_shortened():
+    from orchestrator.context import compact, conversation_size
+    big = "x" * 6000
+    messages = [
+        {"role": "system", "content": "s"}, {"role": "user", "content": "task"},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "c1", "content": big},
+    ]
+    assert conversation_size(compact(messages, 2000)) > 6000  # kept: it is one of the newest
+    squeezed = compact(messages, 2000, keep_recent=0)
+    assert conversation_size(squeezed) < 2000
+    assert [m["role"] for m in squeezed] == ["system", "user", "assistant", "tool"]  # pairs intact

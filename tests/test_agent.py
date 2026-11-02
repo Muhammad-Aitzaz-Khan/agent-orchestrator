@@ -244,3 +244,46 @@ def test_the_last_step_must_be_the_submission(in_tmp):
               max_steps=role.max_steps, runs_dir=in_tmp / "runs")
     assert client.requests[-1]["tool_choice"]["function"]["name"] == role.submit_tool
     assert "tool_choice" not in client.requests[0]
+
+
+TOO_LARGE = ("Request too large for model `openai/gpt-oss-120b` on tokens per minute (TPM): "
+             "Limit 8000, Requested 9214, please reduce your message size and try again.")
+
+
+def too_large_status():
+    response = httpx.Response(413, request=httpx.Request("POST", "http://test"))
+    return openai.APIStatusError(TOO_LARGE, response=response, body=None)
+
+
+def test_request_too_large_is_retried_smaller_without_waiting(in_tmp):
+    """Found in real use: a news job died after the Builder read a feed full of long links and
+    wrote the briefing. Groq said the single request was over its limit; waiting never helps."""
+    (in_tmp / "news.md").write_text("- headline https://news.google.com/rss/articles/" + "CBMiq" * 900 + "\n")
+    client = FakeClient([
+        completion(tool_calls=[("read_file", {"path": "news.md"})]),
+        completion(tool_calls=[("write_file", {"path": "out.md", "content": "brief " * 700})]),
+        rate_limit_error(TOO_LARGE),
+        completion(content="done"),
+    ])
+    result, waits = run(client, root=in_tmp, context_chars=12_000)
+    assert result.status == "completed"
+    assert waits == []
+    refused, retried = (agent.conversation_size(r["messages"]) for r in client.requests[2:4])
+    assert retried < refused * 0.6
+    # the long feed it read was shortened, while its latest step (the write) is still there
+    sent = json.dumps(client.requests[3]["messages"])
+    assert "CBMiq" * 200 not in sent and "Wrote 4200 characters" in sent
+
+
+def test_413_from_the_provider_counts_as_too_large(in_tmp):
+    client = FakeClient([too_large_status(), completion(content="done")])
+    result, waits = run(client, root=in_tmp)
+    assert result.status == "completed" and waits == []
+
+
+def test_gives_up_when_even_the_smallest_request_is_too_large(in_tmp):
+    client = FakeClient([too_large_status()] * len(agent.SQUEEZES))
+    result, _ = run(client, root=in_tmp)
+    assert result.status == "error"
+    assert result.error.startswith("RequestTooLarge")
+    assert len(client.requests) == len(agent.SQUEEZES)
