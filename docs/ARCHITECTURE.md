@@ -247,6 +247,15 @@ The fifth run went through cleanly: all four robots finished, every check passed
 Reviewer's note became the notification. A file job (notes to flashcards), a reminder, a
 weekday news routine, and a page watcher then worked first time.
 
+Recording a demo on the live site later turned up one more. A two-topic news job failed twice
+while the Builder was finishing: the feed it had read plus the briefing it had just written made
+a single request of about 10,700 tokens, over the free tier's 8,000 per request. Google News
+links are long strings of random-looking characters, so they cost far more tokens than their
+length suggests, and the newest steps were never shortened. Groq's "request too large" was
+treated like an ordinary rate limit, so the agent waited and gave up. Now that answer makes the
+agent squeeze the conversation harder, newest steps included, and try again at once
+(`agent.SQUEEZES`, with tests).
+
 ## The free day and security
 
 People without an invite can try Relay for 24 hours (`assistant/trial.py`), with their own

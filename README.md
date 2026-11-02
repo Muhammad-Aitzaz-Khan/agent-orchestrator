@@ -204,6 +204,7 @@ something went wrong, I fixed it, wrote a test so it can't come back, and tried 
 | The same headline twice, and `inputs/news.md` showing up in a briefing | The rules didn't say not to | The writing rules now say no duplicates and no file paths |
 | Reviews were bland and missed problems | The small model was doing the reviewing | The small model only does the Concierge and Planner; checking and reviewing use the big one |
 | The allowance ran out after two jobs | The daily limits were set too low | Measured real jobs (a news briefing is about 60k tokens, flashcards about 25k) and set the limits from that |
+| While recording the demo, a news job failed as the Builder finished | Long Google News links made one request about 10,700 tokens, over the free tier's 8,000, and the agent treated that like a rate limit and waited | An oversized request now makes the agent trim the conversation harder and try again straight away |
 
 After those fixes, the news job went all the way through: four robots, every check passing,
 approved by the Reviewer, notification on the phone. Flashcards, reminders, routines and the
