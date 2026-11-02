@@ -1,4 +1,4 @@
-"""The free day ("Try it out") and the protections around the public site.
+"""The free tries ("Try it out") and the protections around the public site.
 
 Each test is one promise from docs/security-review.md, checked the way an attacker or a curious
 visitor would poke at it.
@@ -24,7 +24,7 @@ def store(tmp_path, monkeypatch):
 
 @pytest.fixture
 def site(store, monkeypatch):
-    """A public server, as on Render, with invites and free days switched on."""
+    """A public server, as on Render, with invites and free tries switched on."""
     for name in ("GOOGLE_CLIENT_ID", "SANDBOX", "RELAY_GUARD_DENY", "TRIALS"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "server-key")
@@ -42,10 +42,10 @@ def start_trial(client):
     return client.post("/auth/trial", json={}, headers=HDR)
 
 
-# ---------- the free day ----------
+# ---------- the free tries ----------
 
 
-def test_a_visitor_can_try_relay_for_a_day(site):
+def test_a_visitor_can_try_relay_without_signing_up(site):
     client = site()
     assert client.get("/api/me").json()["trial"] is True
     r = start_trial(client)
@@ -63,7 +63,7 @@ def test_one_free_day_per_browser(site):
     out = client.post("/auth/logout", headers=HDR)
     assert "cookies" not in out.headers["clear-site-data"]  # signing out must not erase the memory
     again = start_trial(client)  # same browser: the cookie remembers
-    assert again.status_code == 403 and "already had its free day" in again.json()["detail"]
+    assert again.status_code == 403 and "already had its free tries" in again.json()["detail"]
 
 
 def test_a_network_gets_a_few_free_days_not_endless_ones(site):
@@ -203,3 +203,24 @@ def test_a_hostile_news_feed_cannot_blow_up_the_parser(monkeypatch):
     monkeypatch.setattr(gather, "http_get", lambda url, params=None: bomb)
     out = gather.news(["technology"])
     assert "Could not load news" in out and "aaaaaaaaaa" not in out
+
+
+def test_a_guest_gets_three_free_tries(site, store):
+    """Relay runs on free AI models, so a guest can hand the crew a few jobs, not endless ones."""
+    client = site()
+    start_trial(client)
+    guest = next(iter(store.guests(trial.GUEST_DOMAIN)))
+    assert client.get("/api/me").json()["tries_left"] == 3
+    news = {"action": "job", "skill": "news", "title": "Tech news", "params": {"topics": ["technology"]}}
+    for _ in range(3):
+        assert client.post("/api/plans", json={"proposal": news}, headers=HDR).status_code == 200
+    assert client.get("/api/me").json()["tries_left"] == 0
+    refused = client.post("/api/plans", json={"proposal": news}, headers=HDR)
+    assert refused.status_code == 403 and "last free try" in refused.json()["detail"]
+    assert client.post("/api/ask", json={"message": "more news"}, headers=HDR).status_code == 403
+    # reminders don't use the AI, so they never count
+    reminder = {"action": "job", "skill": "reminder", "title": "Pay the bill", "params": {"text": "Pay the bill"}}
+    assert client.post("/api/plans", json={"proposal": reminder}, headers=HDR).status_code == 200
+    # and members are never counted
+    member = store.upsert_user("me@example.com")
+    assert trial.tries_left(store, guest) == 0 and not trial.is_guest(member)

@@ -623,7 +623,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .trip figcaption { color: var(--muted); font-size: 0.9rem; }
 .trip.paused *, .trip.paused *::before, .trip.paused *::after { animation-play-state: paused !important; }
 
-/* ---------- the free day ---------- */
+/* ---------- the free tries ---------- */
 .trial { position: relative; display: grid; gap: 12px; padding: 18px; border-radius: var(--radius-m); max-width: 560px; margin-bottom: 14px; overflow: clip;
   border: 1px solid color-mix(in srgb, var(--sage) 45%, var(--line-2)); background: linear-gradient(135deg, color-mix(in srgb, var(--sage) 13%, var(--panel)), var(--panel));
   box-shadow: 0 30px 60px -44px var(--shadow-deep); animation: rise 0.8s var(--out) 0.5s both; }
@@ -636,6 +636,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
 .guest-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 18px; border-radius: var(--radius-m);
   background: color-mix(in srgb, var(--sage) 13%, var(--panel)); border: 1px solid color-mix(in srgb, var(--sage) 40%, var(--line)); animation: rise 0.5s var(--out) both; }
 .guest-bar .clock { font-family: var(--mono); font-weight: 700; color: var(--sage); }
+.guest-bar .clock.none { color: var(--rose, #e5484d); }
 .guest-bar .icon { color: var(--sage); }
 
 /* a full-width band lit the opposite way to the rest of the page */
@@ -1587,9 +1588,9 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
       h("section", { class: "card" }, h("h2", { text: "The team" }),
         h("p", { class: "muted", style: "margin:0" }, "Curious how the robots work together? ", h("a", { href: "#/agents", text: "Open the Agents page" }), " to watch a job or a recorded run in the office."),
         state.me.local ? null : h("div", {}, h("button", { class: "btn", onclick: async () => {
-          if (state.me.guest && !confirm("End your free day now? You won't be able to start another one from this browser.")) return;
+          if (state.me.guest && !confirm("End your free trial now? You won't be able to start another one from this browser.")) return;
           await api("/auth/logout", { method: "POST" }); location.href = "/";
-        } }, state.me.guest ? "End my free day" : "Sign out"))));
+        } }, state.me.guest ? "End my free trial" : "Sign out"))));
   };
 
   // ---------- notifications ----------
@@ -1931,39 +1932,40 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
     setTimeout(tick, 900);
     return out;
   }
-  // Try it out: one free day, no email or code (the server decides who may have one).
+  // Try it out: a few free tries, no email or code (the server decides who may have them).
   function trialBox() {
     const me = state.me;
     if (!me.trial) return null;
-    if (me.trial_used) return me.trial_over ? null : h("p", { class: "muted small", text: "This browser has already had its free day." });
+    if (me.trial_used) return me.trial_over ? null : h("p", { class: "muted small", text: "This browser has already had its free tries." });
     const note = h("p", { class: "muted small", role: "status", style: "margin:0" });
     const trap = h("input", { type: "text", name: "website", tabindex: "-1", autocomplete: "off", "aria-hidden": "true", class: "trap" });
-    const send = h("button", { class: "btn primary", type: "submit" }, icon("play"), "Try it free for a day");
+    const send = h("button", { class: "btn primary", type: "submit" }, icon("play"), `Try it free, up to ${me.trial_tries} times`);
     const form = h("form", { class: "trial", onsubmit: async (e) => {
       e.preventDefault(); send.disabled = true; note.textContent = "";
       try { await api("/auth/trial", { method: "POST", json: { website: trap.value } }); location.reload(); }
       catch (err) { note.textContent = err.message; send.disabled = false; form.classList.remove("shake"); void form.offsetWidth; form.classList.add("shake"); }
     } },
       h("div", { class: "trial-head" }, h("strong", { text: "No invite? Try it out." }),
-        h("span", { class: "muted small", text: `${me.trial_hours} hours with the whole crew. No email, no code. Gmail and Calendar aren't included, and everything is deleted when the day ends.` })),
+        h("span", { class: "muted small", text: `Hand the whole crew up to ${me.trial_tries} jobs. No email, no code. Relay runs on free AI models, so tries are limited. Gmail and Calendar aren't included, and everything you make is deleted after a day.` })),
       trap, h("div", { class: "toolbar" }, send, note));
     return form;
   }
 
-  // Guests see how much of their free day is left, everywhere in the app.
+  // Guests see how many of their free tries are left, everywhere in the app. A try is a job
+  // that uses the AI (reminders and page watching don't), the same count the server keeps.
   let guestTimer = null;
+  const FREE_SKILLS = new Set(["reminder", "weather_alert"]);
   function guestBar() {
     const end = new Date(state.me.trial_until);
-    const clock = h("span", { class: "clock" });
-    const tick = () => {
-      const left = end - Date.now();
-      if (left <= 0) { clearInterval(guestTimer); location.reload(); return; }
-      const hrs = Math.floor(left / 3600000), mins = Math.floor((left % 3600000) / 60000);
-      clock.textContent = hrs ? `${hrs} h ${mins} min left` : `${mins} min left`;
-    };
-    tick(); clearInterval(guestTimer); guestTimer = setInterval(tick, 30000);
-    return h("div", { class: "guest-bar", role: "status" }, icon("routines"), h("strong", { text: "Free day" }), clock,
-      h("span", { class: "muted small", text: "Gmail and Calendar need an invite. Everything you make here is deleted when the day ends." }));
+    clearTimeout(guestTimer);
+    guestTimer = setTimeout(() => location.reload(), Math.max(0, Math.min(end - Date.now(), 2 ** 31 - 1)));
+    const total = state.me.trial_tries || 3;
+    const used = (state.jobs || []).filter((j) => !FREE_SKILLS.has(j.skill)).length;
+    const left = Math.max(0, total - used);
+    return h("div", { class: "guest-bar", role: "status" }, icon("routines"), h("strong", { text: "Free tries" }),
+      h("span", { class: "clock" + (left ? "" : " none"), text: `${left} of ${total} left` }),
+      h("span", { class: "muted small", text: left ? "Gmail and Calendar need an invite. Everything you make here is deleted after a day."
+        : "That was your last free try. Ask the person who runs Relay for an invite to keep going." }));
   }
 
   function inviteForm() {
@@ -1984,7 +1986,7 @@ main.view { padding: 28px clamp(16px, 4vw, 48px) 120px; max-width: 1180px; width
   function landing() {
     const params = new URLSearchParams(location.search);
     const notices = { "not-invited": "This Relay is invite-only. Ask its owner for an invite.", cancelled: "Sign-in was cancelled.", unverified: "That Google account's email is not verified." };
-    const notice = state.me.trial_over ? "Your free day is over. Thanks for trying Relay! Ask the person who runs it for an invite to keep going." : notices[params.get("signin")];
+    const notice = state.me.trial_over ? "Your free trial is over. Thanks for trying Relay! Ask the person who runs it for an invite to keep going." : notices[params.get("signin")];
     const flip = themeNow() === "light" ? "dark" : "light";
     return h("div", { class: "landing" },
       h("header", { class: "landing-top" }, h("a", { class: "brand", href: "/", style: "padding:0" }, brandMark(), "Relay"),

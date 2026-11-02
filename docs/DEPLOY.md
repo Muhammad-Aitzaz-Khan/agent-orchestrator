@@ -2,7 +2,7 @@
 
 Relay works on your own computer with no setup (`python -m orchestrator.web`). Putting it
 online means routines run while your computer is off, you can use it from your phone, and you
-can invite friends or let people try it for a day.
+can invite friends or let people try it a few times for free.
 
 This is exactly how the live site was set up. It costs nothing to run.
 
@@ -64,11 +64,12 @@ codes, so nobody gets signed out. After that, every push rebuilds the site by it
 - **You:** open the address, sign in with your email and invite code.
 - **Friends:** add their email to `EMAILS=` in `deploy\keys.env`, run `python deploy\deploy.py`
   again, and send them the address and the new code it prints.
-- **Anyone else:** they can press **Try it free for a day** on the front page. A guest gets 24
-  hours, a small AI allowance of their own, no Gmail or Calendar, and everything they make is
-  deleted when the day ends. One free day per browser, a few per network. To switch it off,
+- **Anyone else:** they can press **Try it free, up to 3 times** on the front page. A guest can
+  hand the crew 3 jobs (`TRIAL_TRIES`), with a small AI allowance of their own and no Gmail or
+  Calendar, and everything they make is deleted after a day. One trial per browser, a few per
+  network. To switch it off,
   set `TRIALS=off` in the service's settings (Render: your service > Environment). The other
-  limits are in [the security review](security-review.md#the-free-day).
+  limits are in [the security review](security-review.md#the-free-tries).
 
 ## 4. Put it on your phone
 

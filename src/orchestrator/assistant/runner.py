@@ -32,7 +32,7 @@ def allowance_left(store: Store, user_id: str) -> bool:
     if not (store.usage_today() < _limit("ASSISTANT_DAILY_TOKENS", 350_000)
             and store.usage_today(user_id) < _limit("ASSISTANT_USER_DAILY_TOKENS", 150_000)):
         return False
-    user = store.user(user_id)  # guests on a free day have a smaller allowance of their own
+    user = store.user(user_id)  # guests on free tries have a smaller allowance of their own
     return not trial.is_guest(user) or trial.allowance_left(store, user)
 
 

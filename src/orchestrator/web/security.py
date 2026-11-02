@@ -9,7 +9,7 @@ Each piece answers a common attack (see docs/security-review.md for the full lis
                       by other sites, no referrer leaks, no camera or microphone
     BodyLimit         refuses oversized requests before they are read into memory
     RateLimit         a sliding-window limit per address for the endpoints that cost money
-                      (the AI) or invite guessing (sign-in, free days)
+                      (the AI) or invite guessing (sign-in, free tries)
 """
 import base64
 import hashlib

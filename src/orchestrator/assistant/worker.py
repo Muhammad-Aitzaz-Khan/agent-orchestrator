@@ -31,7 +31,9 @@ def start_due_routines(store: Store, at: dt.datetime | None = None) -> list[dict
     for routine in store.due_routines(at):
         user = store.user(routine["user_id"])
         if user is None or trial.expired(user, at):
-            continue  # a guest's free day is over: their routines stop (and are deleted soon)
+            continue  # a guest's time is over: their routines stop (and are deleted soon)
+        if trial.is_guest(user) and trial.tries_left(store, user) <= 0:
+            continue  # a guest who has used their free tries
         nxt = sched.next_run(routine["schedule"], user.get("tz"), at)
         store.update_routine(routine["id"], last_run_at=at, next_run_at=nxt,
                              enabled=routine["enabled"] and nxt is not None)
@@ -81,7 +83,7 @@ class Worker:
         self._wake.set()
 
     def run_once(self) -> dict | None:
-        if time.monotonic() - self._last_clean >= CLEAN_UP_S:  # free days that are over
+        if time.monotonic() - self._last_clean >= CLEAN_UP_S:  # trials that are over
             self._last_clean = time.monotonic()
             trial.clean_up(self.store)
         start_due_routines(self.store)

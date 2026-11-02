@@ -142,7 +142,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
             user = store.user(uid)
             if user is not None and not trial.expired(user):
                 return user
-            request.session.pop("uid", None)  # a free day that ended, or a deleted account
+            request.session.pop("uid", None)  # a trial that ended, or a deleted account
             request.state.trial_over = user is not None
         if local_mode:  # one person on their own computer: no sign-in needed
             user = store.upsert_user(LOCAL_EMAIL, os.getenv("RELAY_LOCAL_NAME", "you"))
@@ -155,6 +155,11 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         if user is None:
             raise HTTPException(401, "Please sign in.")
         return user
+
+    def need_a_try(user: dict) -> None:
+        """Guests get a few free tries (see assistant/trial.py); members aren't counted."""
+        if trial.is_guest(user) and trial.tries_left(store, user) <= 0:
+            raise HTTPException(403, trial.OUT_OF_TRIES)
 
     def same_site(request: Request) -> None:
         if request.headers.get("x-relay") != "1":
@@ -176,7 +181,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     def connect(provider: str, request: Request):
         user = need_user(request)
         if trial.is_guest(user):
-            raise HTTPException(403, "Gmail and Calendar need an invite; they aren't part of the free day.")
+            raise HTTPException(403, "Gmail and Calendar need an invite; they aren't part of the free tries.")
         if provider not in ("gmail", "calendar"):
             raise HTTPException(404, "Unknown connection.")
         if not google.configured():
@@ -213,7 +218,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         return RedirectResponse(f"/?connected={purpose}", 303)
 
     throttle = Throttle()
-    trial_limit = RateLimit(limit=5, window=3600)       # free-day attempts per address per hour
+    trial_limit = RateLimit(limit=5, window=3600)       # trial starts per address per hour
     ask_limit = RateLimit(limit=20, window=600)         # Concierge questions per person per 10 minutes
     upload_limit = RateLimit(limit=30, window=3600)     # uploads per person per hour
     push_limit = RateLimit(limit=5, window=600)         # test notifications per person per 10 minutes
@@ -236,9 +241,9 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
 
     @router.post("/auth/trial", dependencies=[Depends(same_site)])
     def start_trial(body: TrialBody, request: Request):
-        """Try it out: one free day as a guest, no email or code (see assistant/trial.py)."""
+        """Try it out: a few free tries as a guest, no email or code (see assistant/trial.py)."""
         if not trial.enabled(public):
-            raise HTTPException(404, "Free days aren't offered here.")
+            raise HTTPException(404, "Free tries aren't offered here.")
         if body.website:
             raise HTTPException(400, "Something went wrong. Try again.")
         network = client_ip(request, public)
@@ -258,7 +263,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     def logout(request: Request):
         request.session.clear()
         # Ask the browser to forget cached pages too. Not "cookies": that would also wipe the
-        # cookie that says this browser already had its free day.
+        # cookie that says this browser already had its free tries.
         return JSONResponse({"ok": True}, headers={"Clear-Site-Data": '"cache"'})
 
     @router.post("/api/connections/{provider}/disconnect", dependencies=[Depends(same_site)])
@@ -274,6 +279,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         if user is None:
             return {"signed_in": False, "google": google.configured(), "local": local_mode,
                     "invites": bool(invites()), "trial": trial.enabled(public), "trial_hours": trial.hours(),
+                    "trial_tries": trial.tries(),
                     "trial_used": bool(request.cookies.get(trial.BROWSER_COOKIE)),
                     "trial_over": bool(getattr(request.state, "trial_over", False))}
         connected = store.connections_for(user["id"])
@@ -282,6 +288,8 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         return {
             "signed_in": True, "local": local_mode, "google": google.configured() and not guest,
             "guest": guest, "trial_until": until.isoformat() if until else None,
+            "trial_tries": trial.tries() if guest else None,
+            "tries_left": trial.tries_left(store, user) if guest else None,
             "user": {"name": user["name"], "email": user["email"], "picture": user["picture"],
                      "tz": user["tz"], "prefs": user["prefs"] or {}},
             "connections": connected, "push_key": push.public_key(),
@@ -318,6 +326,7 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
     @router.post("/api/ask", dependencies=[Depends(same_site)])
     def ask(body: AskBody, request: Request):
         user = need_user(request)
+        need_a_try(user)
         ask_limit.hit(user["id"], "That's a lot of questions in a few minutes. Take a short break and try again.")
         client = worker.client()
         if client is None:
@@ -357,6 +366,8 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         title = str(p.get("title") or SKILLS[skill].title)[:80]
         instructions = str(p.get("instructions") or "")[:6000]
         if p["action"] == "job":
+            if SKILLS[skill].uses_ai:
+                need_a_try(user)
             job = store.add_job(user["id"], title, skill, params, instructions)
             worker.poke()
             return {"kind": "job", "job": _job_view(job)}
@@ -472,6 +483,8 @@ def assistant_router(store: Store, worker: Worker, public: bool) -> APIRouter:
         r = store.routine(user["id"], routine_id)
         if r is None:
             raise HTTPException(404, "No such routine.")
+        if r["skill"] in SKILLS and SKILLS[r["skill"]].uses_ai:
+            need_a_try(user)
         job = store.add_job(user["id"], r["title"], r["skill"], r["params"] or {}, r["instructions"],
                             routine_id=r["id"])
         worker.poke()

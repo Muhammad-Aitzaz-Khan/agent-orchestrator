@@ -2,7 +2,7 @@
 
 Pages
     GET  /                          the assistant (static/app.html); people who aren't signed
-                                    in see the front page, with sign-in and the free day
+                                    in see the front page, with sign-in and the free tries
     GET  /office                    the robot office on its own, shown inside the assistant
     GET  /demo                      the office playing recorded runs (members only in public)
     GET  /healthz                   "is it up?" for the host and the keep-awake ping
@@ -20,7 +20,7 @@ your own computer:
 
 On your own computer (the default) Relay listens on 127.0.0.1, signs you in automatically,
 and keeps its data in relay.db. On a public server (RELAY_PUBLIC=1, as on Render):
-    - people sign in with an invite code or Google, or try it out for a day as a guest
+    - people sign in with an invite code or Google, or try it out as a guest, up to 3 times
     - the AI key is read once at start-up and removed from the environment, and the process
       is made non-dumpable, so code the agents run can't read it from /proc
     - model-written code runs with SANDBOX=guarded (see orchestrator/guard)

@@ -15,9 +15,9 @@ Everything marked with a test name runs on every change (`pytest`). The tests li
 | **A01 Broken access control** | Every job, routine, and file is looked up together with its owner, so nobody can open someone else's by guessing an id. On the public site, everything past the sign-in page (the office, the recordings, every API) needs a signed-in member. | `test_nobody_can_see_another_persons_things`, `test_public_mode_shows_nothing_but_sign_in_to_strangers` (tests/test_web.py) |
 | **A02 Security misconfiguration** | A strict Content Security Policy that allows only Relay's own scripts (each inline script is listed by its hash), HSTS, `nosniff`, no framing by other sites, no camera or microphone, no referrer leaks, and personal data marked `no-store`. The API map (`/docs`, `/openapi.json`) isn't published, and the server doesn't announce its software. | `test_pages_carry_protective_headers`, `test_the_csp_lists_exactly_the_pages_own_scripts`, `test_no_map_of_the_api_is_published` |
 | **A03 Software supply chain failures** | Only the packages Relay actually uses (one unused one was removed), exact versions pinned for the server in [`deploy/render/constraints.txt`](../deploy/render/constraints.txt), and every pinned version checked with `pip-audit` (no known vulnerabilities at the time of writing). Two browser libraries (marked, DOMPurify) are stored in the repository, not loaded from a CDN. | `pip-audit -r deploy/render/constraints.txt` |
-| **A04 Cryptographic failures** | Google tokens are encrypted at rest (Fernet). Sessions are signed cookies marked `Secure`, `HttpOnly`, and `SameSite=Lax`. Invite codes are compared in constant time. Network addresses and browser markers for the free day are stored only as keyed hashes. | `test_tokens_are_encrypted_at_rest` (tests/test_assistant.py) |
+| **A04 Cryptographic failures** | Google tokens are encrypted at rest (Fernet). Sessions are signed cookies marked `Secure`, `HttpOnly`, and `SameSite=Lax`. Invite codes are compared in constant time. Network addresses and browser markers for the free tries are stored only as keyed hashes. | `test_tokens_are_encrypted_at_rest` (tests/test_assistant.py) |
 | **A05 Injection** | The database is reached only through SQLAlchemy's parameterised queries. The page builds everything with text nodes, and the Markdown in results is cleaned by DOMPurify. News feeds are parsed with `defusedxml`, so a hostile feed can't blow up the parser. Download names are stripped to safe characters before they go into a header. | `test_a_hostile_news_feed_cannot_blow_up_the_parser`, `test_download_names_cannot_break_out_of_the_header` |
-| **A06 Insecure design** | Nothing runs until you confirm it. Gmail and Calendar are read-only. The free day has its own small AI allowance and a shared pool, so guests can never use up what members get. Rate limits sit on everything that costs money or invites guessing. | `test_guests_cannot_connect_google_or_use_more_than_their_share` |
+| **A06 Insecure design** | Nothing runs until you confirm it. Gmail and Calendar are read-only. The free tries have their own small AI allowance and a shared pool, so guests can never use up what members get. Rate limits sit on everything that costs money or invites guessing. | `test_guests_cannot_connect_google_or_use_more_than_their_share` |
 | **A07 Authentication failures** | Invite sign-in is throttled (8 wrong codes per 15 minutes per address), and the address comes from the host's proxy, so a forged `X-Forwarded-For` header doesn't help. A wrong email and a wrong code get the same answer. Every sign-in starts a fresh session. | `test_sign_in_guessing_is_throttled_even_with_forged_addresses`, `test_wrong_email_and_wrong_code_look_the_same` |
 | **A08 Software or data integrity failures** | Every request that changes something needs the same-site `X-Relay` header (a cross-site form can't send it). Proposals from the AI are checked by a strict schema before anything is saved. | `test_state_changes_need_the_same_site_header` |
 | **A09 Security logging and alerting failures** | Failed jobs, failed proposals, and keep-awake problems are logged with details for the owner; people only ever see plain sentences, never raw errors. | |
@@ -48,16 +48,18 @@ files; a zero process limit stops forks; and memory, file size, and CPU time are
 defence in depth for a small invite-only site, not a container; with Docker available,
 `SANDBOX=docker` runs each script in a locked-down container instead.
 
-## The free day
+## The free tries
 
-"Try it out" lets someone without an invite use Relay for 24 hours. It's limited on purpose:
+"Try it out" lets someone without an invite hand the crew up to 3 jobs. Relay runs on free AI
+models, so it's limited on purpose:
 
-- one free day per browser (a long-lived cookie remembers it, and signing out doesn't erase it)
-- at most 3 per network in 30 days, so friends on the same campus Wi-Fi can each try it
-- at most 25 new free days per day for the whole site
+- 3 tries per guest: a try is one job the crew runs (asking the Concierge and reminders are free)
+- one trial per browser (a long-lived cookie remembers it, and signing out doesn't erase it)
+- at most 3 trials per network in 30 days, so friends on the same campus Wi-Fi can each try it
+- at most 25 new trials per day for the whole site
 - a hidden form field that people never see but bots fill in
 - 60,000 tokens per guest, and 150,000 for all guests together each day
-- no Gmail or Calendar, at most 5 uploaded files, and everything is deleted about an hour after the day ends
+- no Gmail or Calendar, at most 5 uploaded files, and everything is deleted a day after the trial starts
 
 All of these can be changed with environment variables (see `src/orchestrator/assistant/trial.py`).
 
@@ -65,7 +67,7 @@ All of these can be changed with environment variables (see `src/orchestrator/as
 
 - **`Cross-Origin-Embedder-Policy`**: it would block Google Fonts and Google profile pictures,
   and Relay doesn't need the features it unlocks.
-- **A CAPTCHA on the free day**: the limits above are enough for a small site, and a CAPTCHA
+- **A CAPTCHA on the free tries**: the limits above are enough for a small site, and a CAPTCHA
   would mean sending visitors to a third party. If bots ever become a problem, Cloudflare
   Turnstile is the next step.
 - **HSTS preload**: OWASP suggests adding `preload` only deliberately; the site lives on a

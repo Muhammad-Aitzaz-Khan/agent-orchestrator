@@ -1,20 +1,23 @@
-"""Try it out: one free day of Relay for people without an invite.
+"""Try it out: up to three free tries of Relay for people without an invite.
 
-A guest is an ordinary user with an email at @trial.relay and a `trial_until` time in their
-preferences. Everything that keeps the free day fair lives here:
+A try is one job the crew runs (asking the Concierge is free, and so are reminders, which don't
+use the AI). Relay runs on free AI models, so the tries are few on purpose: enough to see what the
+crew can do. A guest is an ordinary user with an email at @trial.relay and a `trial_until` time in
+their preferences, after which they are signed out and deleted. Everything that keeps it fair:
 
+    - TRIAL_TRIES jobs per guest (3)
     - one trial per browser (a long-lived cookie remembers it) and at most a few per network
-      in 30 days, so a shared campus Wi-Fi still works but nobody collects endless days
+      in 30 days, so a shared campus Wi-Fi still works but nobody collects endless tries
     - a cap on new trials per day for the whole site
     - a small AI allowance per guest, and a shared daily pool for all guests together, so
       guests can never use up what the owner and their invited people get
-    - no Gmail or Calendar, and everything a guest made is deleted soon after the day ends
+    - no Gmail or Calendar, and everything a guest made is deleted a day after they start
 
 Addresses and browser tokens are stored only as keyed hashes (HMAC with the site's secret),
 never as they are.
 
 Settings (environment variables): TRIALS (on/off; on by default on a public server),
-TRIAL_HOURS (24), TRIAL_TOKENS (60000 per guest), TRIAL_DAILY_TOKENS (150000 for all guests),
+TRIAL_TRIES (3), TRIAL_HOURS (24, how long a guest's things are kept), TRIAL_TOKENS (60000 per guest), TRIAL_DAILY_TOKENS (150000 for all guests),
 TRIALS_PER_DAY (25), TRIALS_PER_NETWORK (3 in 30 days).
 """
 import datetime as dt
@@ -46,6 +49,22 @@ def hours() -> int:
     return max(1, _setting("TRIAL_HOURS", 24))
 
 
+def tries() -> int:
+    return max(1, _setting("TRIAL_TRIES", 3))
+
+
+def tries_left(store: Store, user: dict) -> int:
+    """Free tries a guest has left: every job that used the AI counts as one."""
+    from orchestrator.assistant.skills import SKILLS
+    used = sum(1 for j in store.jobs_for(user["id"], limit=200)
+               if getattr(SKILLS.get(j["skill"]), "uses_ai", True))
+    return max(0, tries() - used)
+
+
+OUT_OF_TRIES = ("That was your last free try. Thanks for trying Relay! Ask the person who runs it "
+                "for an invite to keep going.")
+
+
 def is_guest(user: dict | None) -> bool:
     return bool(user) and str(user.get("email", "")).endswith("@" + GUEST_DOMAIN)
 
@@ -71,19 +90,19 @@ def fingerprint(kind: str, value: str) -> str:
 
 
 class TrialRefused(Exception):
-    """A plain sentence for the person saying why there is no free day for them right now."""
+    """A plain sentence for the person saying why there are no free tries for them right now."""
 
 
 def start(store: Store, network: str, browser_token: str | None) -> tuple[dict, str]:
-    """Create a guest for one day. Returns (user, browser token to remember in a cookie)."""
+    """Create a guest. Returns (user, browser token to remember in a cookie)."""
     if browser_token and store.trial_starts(fingerprint("browser", browser_token)):
-        raise TrialRefused("This browser has already had its free day. Ask the owner for an invite to keep using Relay.")
+        raise TrialRefused("This browser has already had its free tries. Ask the owner for an invite to keep using Relay.")
     month_ago = now() - NETWORK_WINDOW
     if store.trial_starts(fingerprint("network", network), since=month_ago) >= _setting("TRIALS_PER_NETWORK", 3):
-        raise TrialRefused("Free days from this network are used up for now. Ask the owner for an invite.")
+        raise TrialRefused("Free tries from this network are used up for now. Ask the owner for an invite.")
     day_ago = now() - dt.timedelta(days=1)
     if store.trial_starts_total(since=day_ago) >= _setting("TRIALS_PER_DAY", 25):
-        raise TrialRefused("Today's free days are all taken. Try again tomorrow.")
+        raise TrialRefused("Today's free tries are all taken. Try again tomorrow.")
     token = browser_token or secrets.token_urlsafe(24)
     until = now() + dt.timedelta(hours=hours())
     user = store.add_guest(GUEST_DOMAIN, until)
@@ -98,7 +117,7 @@ def allowance_left(store: Store, user: dict) -> bool:
 
 
 def clean_up(store: Store, grace: dt.timedelta = dt.timedelta(hours=1)) -> int:
-    """Delete guests whose day ended more than `grace` ago, with everything they made.
+    """Delete guests whose time ended more than `grace` ago, with everything they made.
     Old trial records (only hashes) are dropped after the 30-day window."""
     cutoff = now() - grace
     gone = 0

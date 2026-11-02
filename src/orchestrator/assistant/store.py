@@ -98,7 +98,7 @@ usage = sa.Table(
     sa.Column("tokens", sa.Integer, default=0),
 )
 
-# Who has had a free day ("Try it out"). Keys are keyed hashes of a browser token or a
+# Who has started free tries ("Try it out"). Keys are keyed hashes of a browser token or a
 # network address (see assistant/trial.py); nothing here identifies a person.
 trial_starts = sa.Table(
     "trial_starts", metadata,
@@ -338,7 +338,7 @@ class Store:
         with self.engine.connect() as c:
             return int(c.execute(query).scalar() or 0)
 
-    # ---------- free days ("Try it out") ----------
+    # ---------- free tries ("Try it out") ----------
 
     def add_guest(self, domain: str, until: dt.datetime) -> dict:
         user_id = new_id()
@@ -380,7 +380,7 @@ class Store:
         return self._run(trial_starts.delete().where(trial_starts.c.created_at < before))
 
     def delete_user_and_data(self, user_id: str) -> None:
-        """Everything a person made, then the person: used for guests whose free day is over."""
+        """Everything a person made, then the person: used for guests whose trial is over."""
         with self.engine.begin() as c:
             for table in (jobs, routines, uploads, push_subs, connections):
                 c.execute(table.delete().where(table.c.user_id == user_id))

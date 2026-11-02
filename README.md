@@ -52,9 +52,10 @@ When they're done you get a notification. If you're curious, you can open the **
 watch each robot's screen while it works.
 
 > [!TIP]
-> **No invite? No problem.** Press **Try it free for a day** on the
-> [live site](https://relay-u0de.onrender.com). You get the whole crew for 24 hours, no email
-> or password needed. When the day ends, everything you made is deleted.
+> **No invite? No problem.** Press **Try it free, up to 3 times** on the
+> [live site](https://relay-u0de.onrender.com). You can hand the whole crew three jobs, no email
+> or password needed. Relay runs on free AI models, so tries are limited, and everything you
+> made is deleted after a day.
 
 <p align="center">
   <img src="docs/images/agent-flow.gif" width="432" alt="Animation from Relay's front page: you type 'Every weekday at 7 AM, send me tech news'; the Concierge replies with the routine it understood and hands the job down to the Planner, Builder, Checker and Reviewer; each one uses a tool (news, files, checks) and passes the job along; the result goes back up and arrives as a notification.">
@@ -68,11 +69,11 @@ pick one.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/landing-light.png" alt="The front page in the light theme: 'A crew of AI robots that runs your errands', the free-day box, the invite sign-in, and the animated diagram of the crew"></td>
+    <td width="50%"><img src="docs/images/landing-light.png" alt="The front page in the light theme: 'A crew of AI robots that runs your errands', the free-triesay box, the invite sign-in, and the animated diagram of the crew"></td>
     <td width="50%"><img src="docs/images/landing-dark.png" alt="The same front page in the dark theme"></td>
   </tr>
   <tr>
-    <td align="center"><b>The front page</b><br><sub>Try it for a day, or sign in with an invite</sub></td>
+    <td align="center"><b>The front page</b><br><sub>Try it free up to 3 times, or sign in with an invite</sub></td>
     <td align="center"><b>…and after dark</b><br><sub>Same page, dark theme</sub></td>
   </tr>
   <tr>
@@ -213,7 +214,7 @@ page watcher worked too.
 </details>
 
 The automated side: **nearly 200 tests** run on every push with GitHub Actions, none of them calling
-a real AI, plus `ruff` for style. The free day and every security promise below has its own
+a real AI, plus `ruff` for style. The free tries and every security promise below has its own
 test in [`tests/test_security.py`](tests/test_security.py).
 
 ## 🔐 Security
@@ -233,7 +234,7 @@ proves it. The full table is in [docs/security-review.md](docs/security-review.m
 | 🚪 **Access** | Everything past the sign-in page needs a member. Every job, routine and file is looked up together with its owner, so guessing an id gets you nothing |
 | 🔑 **Sign-in** | Invite codes compared in constant time, 8 wrong tries per 15 minutes, a fresh session on every sign-in, and the same answer for a wrong email or a wrong code |
 | 🕵️ **Real addresses** | Rate limits use the address the host's proxy saw, so a forged `X-Forwarded-For` header doesn't help |
-| 🧯 **Limits** | Requests over 11 MB refused before they're read; rate limits on asking, uploading, sign-in and free days |
+| 🧯 **Limits** | Requests over 11 MB refused before they're read; rate limits on asking, uploading, sign-in and free tries |
 | 📦 **Dependencies** | Exact versions pinned for the server and checked with `pip-audit`; one unused package removed; news feeds parsed with `defusedxml` |
 | 🤖 **The agents** | No network or email tools, file access kept inside the job's folder, and the scripts they write run in a guarded sandbox with none of the site's secrets |
 | 📧 **Your Google data** | Gmail and Calendar are read-only, email is never stored, and tokens are encrypted at rest |
@@ -241,15 +242,16 @@ proves it. The full table is in [docs/security-review.md](docs/security-review.m
 </details>
 
 <details>
-<summary><b>How the free day is kept fair</b></summary>
+<summary><b>How the free tries are kept fair</b></summary>
 <br>
 
-- one free day per browser (a long-lived cookie remembers it, and signing out doesn't erase it)
-- at most 3 per network in 30 days, so friends on the same campus Wi-Fi can each have one
-- at most 25 new free days per day for the whole site
+- 3 tries per guest: a try is one job the crew runs (asking the Concierge and reminders are free)
+- one trial per browser (a long-lived cookie remembers it, and signing out doesn't erase it)
+- at most 3 trials per network in 30 days, so friends on the same campus Wi-Fi can each have one
+- at most 25 new trials per day for the whole site
 - a hidden form field that people never see but spam bots fill in
 - 60,000 tokens per guest and 150,000 for all guests together each day, separate from members
-- no Gmail or Calendar, at most 5 uploads, and everything deleted about an hour after the day ends
+- no Gmail or Calendar, at most 5 uploads, and everything deleted a day after the trial starts
 
 Network addresses and browser markers are only ever stored as keyed hashes. Set `TRIALS=off`
 to turn the whole thing off.
@@ -334,7 +336,7 @@ agent-orchestrator/
 │   ├── roles.py           each robot's prompt and tools, for fixing, creating and assistant jobs
 │   ├── orchestrator.py    passes the job from robot to robot
 │   ├── tools.py           files, search, tests and the sandboxes
-│   ├── assistant/         the Concierge, skills, gathering, scheduler, Google, free day
+│   ├── assistant/         the Concierge, skills, gathering, scheduler, Google, free tries
 │   ├── guard/             the sandbox used on servers without Docker
 │   └── web/               the app, the office, sign-in, the API and the security layer
 ├── tests/                 nearly 200 tests, none of which call a real AI

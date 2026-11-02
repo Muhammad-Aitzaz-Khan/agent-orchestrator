@@ -212,7 +212,7 @@ project to fix.
 
 - People sign in with an invite code (`INVITES`, one per email, made by `deploy/deploy.py`;
   wrong codes are throttled per address) or with Google for emails in `ALLOWED_EMAILS`, and
-  anyone else can try it for a day as a guest.
+  anyone else can try it as a guest, up to 3 times.
 - Everything past the sign-in page needs a signed-in person, and every response carries the
   security headers from `web/security.py` (a script policy listing only Relay's own scripts,
   HSTS, no framing by other sites, and more).
@@ -256,10 +256,11 @@ treated like an ordinary rate limit, so the agent waited and gave up. Now that a
 agent squeeze the conversation harder, newest steps included, and try again at once
 (`agent.SQUEEZES`, with tests).
 
-## The free day and security
+## The free tries and security
 
-People without an invite can try Relay for 24 hours (`assistant/trial.py`), with their own
-small allowance, no Gmail or Calendar, and their data deleted when the day ends. The
+People without an invite can hand the crew up to 3 jobs (`assistant/trial.py`): Relay runs on
+free AI models, so tries are kept few. Guests have their own small allowance, no Gmail or
+Calendar, and their data is deleted a day after they start. The
 protective layer of the website (headers, limits, the real client address) is in
 `web/security.py`. Both are explained, risk by risk, in [the security review](security-review.md).
 
@@ -281,7 +282,7 @@ Reviewer contribute and what they cost.
 | `doctor.py` | Checks the provider, key, and whether a model can make tool calls |
 | `web/` | The Relay web app, its live event stream, and replays |
 | `web/security.py` | Security headers with a strict script policy, request size limit, rate limits, the real client address |
-| `assistant/trial.py` | The free day: who may have one, their allowance, and the clean-up afterwards |
+| `assistant/trial.py` | The free tries: who may have them, how many are left, and the clean-up afterwards |
 | `evals/rescore.py` | Re-judges finished runs from their traces after a task's tests are corrected |
 | `evals/run_evals.py` | Runs either mode on the benchmark and judges results with its own test run |
 
